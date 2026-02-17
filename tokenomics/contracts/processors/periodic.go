@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
@@ -71,16 +72,48 @@ func (p *PeriodicProcessor) CalculatePayment(
 
 		amount := feePerUnit * timeInUnit
 
+		// Generate unique UUID for this payment item
+		uniqueID := uuid.NewString()
+
+		// Build enriched metadata
+		metadata := map[string]interface{}{
+			"total_utilization_sec": deployment.TotalUtilizationSec,
+			"period_start":          periodicUsage.PeriodStart.Format(time.RFC3339),
+			"period_end":            periodicUsage.PeriodEnd.Format(time.RFC3339),
+			"periods_invoiced":      periodicUsage.PeriodsInvoiced,
+			"payment_model":         contracts.Periodic,
+			"payment_period":        pd.PaymentPeriod,
+			"payment_period_count":  pd.PaymentPeriodCount,
+			"fee_per_time_unit":     pd.FeePerTimeUnit,
+			"time_unit":             pd.TimeUnit,
+			"deployment_id":         deployment.DeploymentID,
+			"amount":                formatAmount(amount),
+		}
+
+		// Add allocation details if available
+		if len(deployment.Allocations) > 0 {
+			metadata["allocation_count"] = len(deployment.Allocations)
+			allocations := make([]map[string]interface{}, 0, len(deployment.Allocations))
+			for _, alloc := range deployment.Allocations {
+				allocData := map[string]interface{}{
+					"allocation_id": alloc.AllocationID,
+					"duration_sec":  alloc.Duration.Seconds(),
+					"start_time":    alloc.StartTime.Format(time.RFC3339),
+				}
+				if !alloc.EndTime.IsZero() {
+					allocData["end_time"] = alloc.EndTime.Format(time.RFC3339)
+				}
+				allocations = append(allocations, allocData)
+			}
+			metadata["allocations"] = allocations
+		}
+
 		items = append(items, &contracts.PaymentItem{
-			UniqueID:     "", // Will be set by payment processor
+			UniqueID:     uniqueID, // Generated UUID
 			DeploymentID: deployment.DeploymentID,
 			Amount:       formatAmount(amount),
 			Usages:       1,
-			Metadata: map[string]interface{}{
-				"total_utilization_sec": deployment.TotalUtilizationSec,
-				"period_start":          periodicUsage.PeriodStart,
-				"period_end":            periodicUsage.PeriodEnd,
-			},
+			Metadata:     metadata,
 		})
 	}
 
@@ -104,6 +137,9 @@ func (p *PeriodicProcessor) Validate(paymentDetails contracts.PaymentDetails) er
 	}
 	if _, err := convert.ParsePaymentPeriod(paymentDetails.PaymentPeriod); err != nil {
 		return err
+	}
+	if paymentDetails.PaymentPeriodCount <= 0 {
+		return fmt.Errorf("payment_period_count must be a positive integer, got: %d", paymentDetails.PaymentPeriodCount)
 	}
 	return nil
 }

@@ -559,6 +559,11 @@ func (s *TestSuite) setupTestNetwork() {
 			if nodeIndex == 1 || nodeIndex == 2 || nodeIndex == 3 {
 				cfg.Job.RequireContractsForDeployment = true
 			}
+		case "deployment_with_contract_chain_tests":
+			if nodeIndex == 5 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9427/"
+				cfg.PaymentProvider.Mode = true
+			}
 		}
 
 		if s.Name == "deployment_with_contracts_collect_after_pay_tests" && nodeIndex == 3 {

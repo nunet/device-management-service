@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
@@ -88,14 +89,41 @@ func (p *PayPerTimeUtilizationProcessor) CalculatePayment(
 
 		amount := feePerUnit * timeInUnit
 
+		// Generate unique UUID for this payment item
+		uniqueID := uuid.NewString()
+
+		// Build enriched metadata
+		metadata := map[string]interface{}{
+			"total_utilization_sec": deployment.TotalUtilizationSec,
+			"allocation_count":      len(deployment.Allocations),
+		}
+
+		// Add allocation details
+		allocations := make([]map[string]interface{}, 0, len(deployment.Allocations))
+		for _, alloc := range deployment.Allocations {
+			allocData := map[string]interface{}{
+				"allocation_id":        alloc.AllocationID,
+				"duration_sec":         alloc.Duration.Seconds(),
+				"start_time":           alloc.StartTime.Format(time.RFC3339),
+				"payment_model":        contracts.PayPerTimeUtilization,
+				"payment_period":       pd.PaymentPeriod,
+				"payment_period_count": pd.PaymentPeriodCount,
+				"fee_per_time_unit":    pd.FeePerTimeUnit,
+				"time_unit":            pd.TimeUnit,
+			}
+			if !alloc.EndTime.IsZero() {
+				allocData["end_time"] = alloc.EndTime.Format(time.RFC3339)
+			}
+			allocations = append(allocations, allocData)
+		}
+		metadata["allocations"] = allocations
+
 		items = append(items, &contracts.PaymentItem{
-			UniqueID:     "", // Will be set by payment processor
+			UniqueID:     uniqueID, // Generated UUID
 			DeploymentID: deployment.DeploymentID,
 			Amount:       formatAmount(amount),
 			Usages:       1,
-			Metadata: map[string]interface{}{
-				"total_utilization_sec": deployment.TotalUtilizationSec,
-			},
+			Metadata:     metadata,
 		})
 	}
 
@@ -112,6 +140,16 @@ func (p *PayPerTimeUtilizationProcessor) Validate(paymentDetails contracts.Payme
 	}
 	if _, err := convert.StringToFloat64(paymentDetails.FeePerTimeUnit, "fee_per_time_unit"); err != nil {
 		return err
+	}
+	// Validate payment_period if provided (optional for this model)
+	if paymentDetails.PaymentPeriod != "" {
+		if _, err := convert.ParsePaymentPeriod(paymentDetails.PaymentPeriod); err != nil {
+			return err
+		}
+	}
+	// Validate payment_period_count if provided (optional for this model)
+	if paymentDetails.PaymentPeriodCount < 0 {
+		return fmt.Errorf("payment_period_count must be a positive integer, got: %d", paymentDetails.PaymentPeriodCount)
 	}
 	return nil
 }

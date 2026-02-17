@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -168,6 +169,55 @@ func (n *Node) handleNewDeployment(msg actor.Envelope) {
 	if request.Ensemble.V1 == nil {
 		handleErr(errors.New("empty ensemble config"))
 		return
+	}
+
+	if request.Ensemble.Contracts() != nil {
+		for _, contract := range request.Ensemble.Contracts() {
+			if contract.DID == "" {
+				handleErr(errors.New("contract DID is required"))
+				return
+			}
+		}
+
+		// retrieve contract information from contract host
+		for k, contract := range request.Ensemble.Contracts() {
+			// Call the contract host node (not contract actor) to get contract info
+			// Use HandleFromDID which defaults to "root" inbox for node-level behaviors
+			destination, err := actor.HandleFromDID(contract.Host)
+			if err != nil {
+				handleErr(fmt.Errorf("failed to get contract host handle: %w", err))
+				return
+			}
+
+			// invoke behavior to retrieve contract information
+			reply, err := n.invokeBehaviour(
+				destination,
+				behaviors.ContractInfoBehavior,
+				behaviors.ContractInfoRequest{
+					ContractDID: contract.DID,
+				},
+				invokeMessageTimeout,
+			)
+			if err != nil {
+				handleErr(fmt.Errorf("failed to invoke contract info for %s: %w", contract.DID, err))
+				return
+			}
+
+			var contractInfoResp behaviors.ContractInfoResponse
+			if err := json.Unmarshal(reply.Message, &contractInfoResp); err != nil {
+				handleErr(fmt.Errorf("failed to unmarshal contract info response: %w", err))
+				return
+			}
+
+			if !contractInfoResp.OK {
+				handleErr(fmt.Errorf("contract info error: %s", contractInfoResp.Error))
+				return
+			}
+
+			contract.Provider = contractInfoResp.Provider
+			contract.Requestor = contractInfoResp.Requestor
+			request.Ensemble.V1.Contracts[k] = contract
+		}
 	}
 
 	orch, err := n.createOrchestrator(n.ctx, request.Ensemble, request.Ensemble.Contracts())
@@ -533,6 +583,307 @@ func (n *Node) handleDeploymentManifest(msg actor.Envelope) {
 
 	resp.Manifest = deployment.Manifest
 	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleDeploymentInfo(msg actor.Envelope) {
+	defer msg.Discard()
+
+	orchestratorID := ""
+	handleErr := func(err error) {
+		log.Errorw("deployment_info_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
+		n.sendReply(msg, DeploymentInfoResponse{Error: err.Error()})
+	}
+
+	var request DeploymentInfoRequest
+	var resp DeploymentInfoResponse
+
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(fmt.Errorf("error unmarshalling deployment info request: %s", err))
+		return
+	}
+
+	if request.ID == "" {
+		handleErr(errors.New("deployment ID is required"))
+		return
+	}
+
+	// Get deployment from store (primary source of truth)
+	deployment, err := n.orchestratorRegistry.GetDeployment(request.ID)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get deployment: %s", err))
+		return
+	}
+	orchestratorID = deployment.OrchestratorID
+
+	resp.ID = deployment.OrchestratorID
+	resp.Status = deployment.Status.String()
+
+	// Try to get orchestrator (may exist even for non-running deployments)
+	orch, err := n.orchestratorRegistry.GetOrchestrator(request.ID)
+	hasOrchestrator := err == nil
+
+	var manifest jobs.EnsembleManifest
+	var allocationInfo map[string]jobtypes.AllocationInfo
+	if hasOrchestrator {
+		// If orchestrator exists, get latest manifest from it
+		manifest = orch.Manifest()
+		resp.Manifest = &manifest
+		resp.Allocations = make(map[string]AllocationDetails)
+
+		// Get allocation info
+		allocationInfo = orch.AllocationInfo()
+		for allocID, info := range allocationInfo {
+			resp.Allocations[allocID] = AllocationDetails{
+				AllocationID:   info.AllocationID,
+				Status:         string(info.Status),
+				HeartbeatSeq:   info.HeartbeatSeq,
+				HasHealthCheck: info.HasHealthCheck,
+				Health:         info.Health,
+				ResourceLimit:  info.ResourceLimit,
+				ResourceUsage:  info.ResourceUsage,
+				DNSName:        info.DNSName,
+				IP:             info.IP,
+				Timestamp:      info.Timestamp,
+			}
+		}
+	} else {
+		// If orchestrator doesn't exist, use manifest from store
+		manifest = deployment.Manifest
+		resp.Manifest = &manifest
+		resp.Allocations = make(map[string]AllocationDetails)
+		allocationInfo = make(map[string]jobtypes.AllocationInfo)
+	}
+
+	// Collect resource usage if requested (works for both running and completed deployments if orchestrator exists)
+	if request.IncludeUsage && hasOrchestrator {
+		usage := make(map[string]*types.ExecutorStats, len(manifest.Allocations))
+
+		// Build a map from allocation ID to manifest key for matching
+		allocIDToManifestKey := make(map[string]string, len(allocationInfo))
+		for allocID := range allocationInfo {
+			parsedID, err := types.ParseAllocationID(allocID)
+			if err != nil {
+				log.Warnw("failed to parse allocation ID for usage mapping",
+					"allocationID", allocID,
+					"error", err)
+				continue
+			}
+			manifestKey := parsedID.ManifestKey()
+			allocIDToManifestKey[allocID] = manifestKey
+		}
+
+		for manifestKey, allocManifest := range manifest.Allocations {
+			// Find the corresponding allocation ID
+			var matchingAllocID string
+			for allocID, mappedKey := range allocIDToManifestKey {
+				if mappedKey == manifestKey {
+					matchingAllocID = allocID
+					break
+				}
+			}
+
+			if matchingAllocID == "" {
+				log.Warnw("could not find matching allocation ID for manifest key",
+					"manifestKey", manifestKey)
+				continue
+			}
+
+			reply, err := n.invokeBehaviour(
+				allocManifest.Handle,
+				behaviors.AllocationStatsBehavior,
+				behaviors.AllocationStatsRequest{},
+				allocationStatsRequestTimeout,
+			)
+			if err != nil {
+				log.Warnw("failed to get allocation stats",
+					"allocation", matchingAllocID,
+					"error", err)
+				continue
+			}
+
+			var statsResp behaviors.AllocationStatsResponse
+			if err := json.Unmarshal(reply.Message, &statsResp); err != nil {
+				log.Warnw("failed to decode allocation stats",
+					"allocation", matchingAllocID,
+					"error", err)
+				continue
+			}
+
+			if statsResp.OK && statsResp.Stats != nil {
+				usage[matchingAllocID] = statsResp.Stats
+				// Update allocation details with stats
+				if details, exists := resp.Allocations[matchingAllocID]; exists {
+					details.ExecutorStats = statsResp.Stats
+					resp.Allocations[matchingAllocID] = details
+				}
+			} else {
+				log.Warnw("allocation stats error",
+					"allocation", matchingAllocID,
+					"error", statsResp.Error)
+			}
+		}
+
+		resp.Usage = usage
+	}
+
+	// Collect logs if requested (works for both running and completed deployments if orchestrator exists)
+	if request.IncludeLogs {
+		// Build a map from allocation ID to manifest key for matching
+		manifestKeyToAllocID := make(map[string]string, len(allocationInfo))
+		for allocID := range allocationInfo {
+			parsedID, err := types.ParseAllocationID(allocID)
+			if err != nil {
+				log.Warnw("failed to parse allocation ID for logs mapping",
+					"allocationID", allocID,
+					"error", err)
+				continue
+			}
+			manifestKey := parsedID.ManifestKey()
+			manifestKeyToAllocID[manifestKey] = allocID
+		}
+
+		// Determine which allocations to get logs for
+		allocationsToLog := make(map[string]bool)
+		if len(request.AllocationNames) == 0 {
+			// Get logs for all allocations in manifest
+			for manifestKey := range manifest.Allocations {
+				allocationsToLog[manifestKey] = true
+			}
+		} else {
+			// Get logs for specified allocation names (could be config names or manifest keys)
+			// Try to match them to manifest keys
+			for _, requestedName := range request.AllocationNames {
+				found := false
+				// First try as manifest key directly
+				if _, exists := manifest.Allocations[requestedName]; exists {
+					allocationsToLog[requestedName] = true
+					found = true
+				} else {
+					// Try as config name - search through manifest allocations
+					for manifestKey, allocManifest := range manifest.Allocations {
+						if allocManifest.RedundancyGroup == requestedName {
+							allocationsToLog[manifestKey] = true
+							found = true
+							break
+						}
+					}
+				}
+				if !found {
+					log.Warnw("requested allocation name not found in manifest",
+						"requestedName", requestedName)
+				}
+			}
+		}
+
+		// Get logs for each allocation
+		for manifestKey := range allocationsToLog {
+			// Find the corresponding allocation ID
+			allocID, exists := manifestKeyToAllocID[manifestKey]
+			if !exists {
+				log.Warnw("could not find matching allocation ID for manifest key",
+					"manifestKey", manifestKey)
+				continue
+			}
+
+			logsData, err := orch.GetAllocationLogs(manifestKey)
+			if err != nil {
+				log.Warnw("failed to get allocation logs",
+					"allocation", allocID,
+					"manifestKey", manifestKey,
+					"error", err)
+				// Add error to allocation details
+				if details, exists := resp.Allocations[allocID]; exists {
+					details.Logs = &AllocationLogs{
+						Error: err.Error(),
+					}
+					resp.Allocations[allocID] = details
+				}
+				continue
+			}
+
+			// Write logs to directory (reuse existing logic)
+			allocDir, err := orch.WriteAllocationLogs(manifestKey, logsData.Stdout, logsData.Stderr)
+			if err != nil {
+				log.Warnw("failed to write allocation logs",
+					"allocation", allocID,
+					"manifestKey", manifestKey,
+					"error", err)
+				if details, exists := resp.Allocations[allocID]; exists {
+					details.Logs = &AllocationLogs{
+						Error: err.Error(),
+					}
+					resp.Allocations[allocID] = details
+				}
+				continue
+			}
+
+			// Add logs to allocation details
+			if details, exists := resp.Allocations[allocID]; exists {
+				details.Logs = &AllocationLogs{
+					StdoutPath:    filepath.Join(allocDir, "stdout.log"),
+					StderrPath:    filepath.Join(allocDir, "stderr.log"),
+					LogsWrittenTo: allocDir,
+				}
+				resp.Allocations[allocID] = details
+			}
+		}
+	}
+
+	n.sendReply(msg, resp)
+}
+
+type DeploymentInfoRequest struct {
+	ID              string   `json:"id"`                         // Deployment ID (required)
+	IncludeUsage    bool     `json:"include_usage,omitempty"`    // Include resource usage stats
+	IncludeLogs     bool     `json:"include_logs,omitempty"`     // Include logs for all allocations
+	AllocationNames []string `json:"allocation_names,omitempty"` // Specific allocations to include logs for (empty = all)
+}
+
+type AllocationLogs struct {
+	StdoutPath    string `json:"stdout_path,omitempty"`     // Path to stdout.log file
+	StderrPath    string `json:"stderr_path,omitempty"`     // Path to stderr.log file
+	LogsWrittenTo string `json:"logs_written_to,omitempty"` // Directory path where logs are written
+	Error         string `json:"error,omitempty"`           // Error retrieving logs (if any)
+}
+
+type AllocationDetails struct {
+	// From AllocationInfo
+	AllocationID   string                           `json:"allocation_id"`
+	Status         string                           `json:"status"`
+	HeartbeatSeq   int64                            `json:"heartbeat_seq"`
+	HasHealthCheck bool                             `json:"has_health_check"`
+	Health         string                           `json:"health"`
+	ResourceLimit  types.Resources                  `json:"resource_limit"`
+	ResourceUsage  jobtypes.AllocationResourceUsage `json:"resource_usage"`
+	DNSName        string                           `json:"dns_name"`
+	IP             string                           `json:"ip"`
+	Timestamp      int64                            `json:"timestamp"`
+
+	// Optional: Resource usage stats (if IncludeUsage=true)
+	ExecutorStats *types.ExecutorStats `json:"executor_stats,omitempty"`
+
+	// Optional: Logs (if IncludeLogs=true)
+	Logs *AllocationLogs `json:"logs,omitempty"`
+}
+
+type DeploymentInfoResponse struct {
+	// Basic deployment information
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+
+	// Full manifest
+	Manifest *jobs.EnsembleManifest `json:"manifest,omitempty"`
+
+	// Allocation information
+	Allocations map[string]AllocationDetails `json:"allocations,omitempty"`
+
+	// Optional: Resource usage (if IncludeUsage=true)
+	Usage map[string]*types.ExecutorStats `json:"usage,omitempty"`
 }
 
 type DeploymentShutdownRequest struct {

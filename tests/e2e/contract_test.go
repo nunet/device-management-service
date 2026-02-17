@@ -25,6 +25,10 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 )
 
+const (
+	defaultFeePerTimeUnit = "0.01" // $0.01 per second
+)
+
 // DeployWithContractTest runs the tests that deploy with contracts
 func DeployWithContractTest(suite *TestSuite) {
 	suite.Run("dms with contracts", func() {
@@ -97,10 +101,7 @@ func DeployWithContractTest(suite *TestSuite) {
 		contractsContent := `contracts:
   contract1:
     did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"
-    payment_details:
-        payment_model: "` + string(contracts.PayPerAllocation) + `"
-        fee_per_allocation: "` + feesPerAllocation + `"`
+    host: "` + contractHost.dmsDID + `"`
 		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
 		suite.Require().NoError(err)
 
@@ -431,10 +432,7 @@ func DeployWithContractCollectAfterPayTest(suite *TestSuite) {
 		contractsContent := `contracts:
   contract1:
     did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"
-    payment_details:
-        payment_model: "` + string(contracts.PayPerAllocation) + `"
-        fee_per_allocation: "` + feesPerAllocation + `"`
+    host: "` + contractHost.dmsDID + `"`
 		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
 		suite.Require().NoError(err)
 
@@ -694,10 +692,7 @@ func DeployWithContractPayPerDeploymentTest(suite *TestSuite) {
 		contractsContent := `contracts:
   contract1:
     did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"
-    payment_details:
-        payment_model: "` + string(contracts.PayPerDeployment) + `"
-        fee_per_deployment: "` + feePerDeployment + `"`
+    host: "` + contractHost.dmsDID + `"`
 		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
 		suite.Require().NoError(err)
 
@@ -948,7 +943,7 @@ func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
 		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750"
 		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
 
-		feePerTimeUnit := "0.01" // $0.01 per second
+		feePerTimeUnit := defaultFeePerTimeUnit
 		timeUnit := "second"
 
 		// rpc on port
@@ -1007,11 +1002,7 @@ func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
 		contractsContent := `contracts:
   contract1:
     did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"
-    payment_details:
-        payment_model: "` + string(contracts.PayPerTimeUtilization) + `"
-        time_unit: "` + timeUnit + `"
-        fee_per_time_unit: "` + feePerTimeUnit + `"`
+    host: "` + contractHost.dmsDID + `"`
 		err = replaceContractInFile(destinationFileEnsemble1, contractsContent)
 		suite.Require().NoError(err)
 
@@ -1504,13 +1495,7 @@ func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
 		contractsContent := `contracts:
     contract1:
       did: "` + contractDID + `"
-      host: "` + contractHost.dmsDID + `"
-      payment_details:
-        payment_model: "` + string(contracts.PayPerResourceUtilization) + `"
-        fee_per_cpu_core_per_time_unit: "` + feePerCPUCorePerTimeUnit + `"
-        fee_per_ram_gb_per_time_unit: "` + feePerRAMGBPerTimeUnit + `"
-        fee_per_disk_gb_per_time_unit: "` + feePerDiskGBPerTimeUnit + `"
-        resource_time_unit: "` + resourceTimeUnit + `"`
+      host: "` + contractHost.dmsDID + `"`
 
 		err = replaceContractInFile(destinationFileEnsemble1, contractsContent)
 		suite.Require().NoError(err)
@@ -2748,13 +2733,7 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 		contractsContent := `contracts:
   contract1:
     did: "` + contractDID + `"
-    host: "` + contractHost.dmsDID + `"
-    payment_details:
-        payment_model: "` + string(contracts.Periodic) + `"
-        fee_per_time_unit: "` + feePerTimeUnit + `"
-        time_unit: "` + timeUnit + `"
-        payment_period: "` + paymentPeriod + `"
-        payment_period_count: ` + paymentPeriodCount
+    host: "` + contractHost.dmsDID + `"`
 		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
 		suite.Require().NoError(err)
 
@@ -3135,6 +3114,66 @@ func setupContractChainCapabilities(suite *TestSuite) {
 	}
 	suite.grantTokens[paymentValidator.index][contractHost.index] = paymentValidatorGrantToken
 
+	// Step 5.a: Organization grants capabilities to Payment validator
+	// Payment validator needs to send transactions to Organization (for tail contracts)
+	orgToPaymentValidatorGrantToken := organization.client.grant(
+		suite.T(),
+		organization.dmsContext,
+		paymentValidator.userDID,
+		organization.password,
+	)
+	organization.client.anchor(suite.T(), orgToPaymentValidatorGrantToken, organization.dmsContext, "require", organization.password)
+	paymentValidator.client.anchor(suite.T(), orgToPaymentValidatorGrantToken, paymentValidator.userContext, "provide", paymentValidator.password)
+	if suite.grantTokens[organization.index] == nil {
+		suite.grantTokens[organization.index] = make(map[int]string)
+	}
+	suite.grantTokens[organization.index][paymentValidator.index] = orgToPaymentValidatorGrantToken
+
+	// Step 5.b: Orchestrator grants capabilities to Payment validator
+	// Payment validator needs to send transactions to Orchestrator (for head contract)
+	orchToPaymentValidatorGrantToken := orchestrator.client.grant(
+		suite.T(),
+		orchestrator.dmsContext,
+		paymentValidator.userDID,
+		orchestrator.password,
+	)
+	orchestrator.client.anchor(suite.T(), orchToPaymentValidatorGrantToken, orchestrator.dmsContext, "require", orchestrator.password)
+	paymentValidator.client.anchor(suite.T(), orchToPaymentValidatorGrantToken, paymentValidator.userContext, "provide", paymentValidator.password)
+	if suite.grantTokens[orchestrator.index] == nil {
+		suite.grantTokens[orchestrator.index] = make(map[int]string)
+	}
+	suite.grantTokens[orchestrator.index][paymentValidator.index] = orchToPaymentValidatorGrantToken
+
+	// Step 5.c: Payment validator grants capabilities to Organization
+	// Organization needs to send payment validation requests to Payment validator (for tail contracts)
+	paymentValidatorToOrgGrantToken := paymentValidator.client.grant(
+		suite.T(),
+		paymentValidator.dmsContext,
+		organization.userDID,
+		paymentValidator.password,
+	)
+	paymentValidator.client.anchor(suite.T(), paymentValidatorToOrgGrantToken, paymentValidator.dmsContext, "require", paymentValidator.password)
+	organization.client.anchor(suite.T(), paymentValidatorToOrgGrantToken, organization.userContext, "provide", organization.password)
+	if suite.grantTokens[paymentValidator.index] == nil {
+		suite.grantTokens[paymentValidator.index] = make(map[int]string)
+	}
+	suite.grantTokens[paymentValidator.index][organization.index] = paymentValidatorToOrgGrantToken
+
+	// Step 5.d: Payment validator grants capabilities to Orchestrator
+	// Orchestrator needs to send payment validation requests to Payment validator (for head contract)
+	paymentValidatorToOrchGrantToken := paymentValidator.client.grant(
+		suite.T(),
+		paymentValidator.dmsContext,
+		orchestrator.userDID,
+		paymentValidator.password,
+	)
+	paymentValidator.client.anchor(suite.T(), paymentValidatorToOrchGrantToken, paymentValidator.dmsContext, "require", paymentValidator.password)
+	orchestrator.client.anchor(suite.T(), paymentValidatorToOrchGrantToken, orchestrator.userContext, "provide", orchestrator.password)
+	if suite.grantTokens[paymentValidator.index] == nil {
+		suite.grantTokens[paymentValidator.index] = make(map[int]string)
+	}
+	suite.grantTokens[paymentValidator.index][orchestrator.index] = paymentValidatorToOrchGrantToken
+
 	// Step 6: All nodes' dmsCtx trust userCtx (set root anchors)
 	for _, node := range suite.nodes {
 		node.client.addRootAnchor(suite.T(), node.dmsContext, node.userDID, node.password)
@@ -3162,6 +3201,13 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		paymentValidator.client.offboard(suite.T(), paymentValidator.userContext, paymentValidator.password)
 		organization.client.offboard(suite.T(), organization.userContext, organization.password)
 
+		// Start mock RPC server for payment validator
+		go startMockRPC(9427)
+		suite.Require().Eventually(func() bool {
+			url := "http://localhost:9427/healthz"
+			return checkHealth(url)
+		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
+
 		// Step 1: Create Contract A (Orchestrator ↔ Organization)
 		// Contract A should have DisableBilling: true
 		srcFileA := filepath.Join(suite.testDataDir, "contracts", "sample.json.sample")
@@ -3176,6 +3222,8 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		metadataJSON := fmt.Sprintf(`{"%s": "%s"}`, contracts.ContractChainRoleMetadataKey, contracts.ContractChainRoleHead)
 
 		// Replace placeholders for Contract A
+		feePerTimeUnit := defaultFeePerTimeUnit // $0.01 per second for PayPerTimeUtilization
+		timeUnit := "second"                    // Time unit for PayPerTimeUtilization
 		err = replacePlaceholders(
 			destinationFileA,
 			contractHostA.dmsDID,                         // Contract host
@@ -3184,15 +3232,25 @@ func DeployWithContractChainTest(suite *TestSuite) {
 			paymentValidator.dmsDID,                      // Payment validator
 			"0xe66b31678d6c16e9ebf358268a790b763c133750", // Orchestrator ETH address
 			"0x4741783ed607d1496f65749d2d9c94cf6c23352a", // Organization ETH address
-			"10", // Fees
-			string(contracts.PayPerAllocation),
-			"", "", "", "", "", "", "", "", "", "minute", "1", startDate, endDate, "false", // disable_billing: false for Contract A (Head Contract) - ENABLE BILLING
+			"",                                      // Fees (not used for PayPerTimeUtilization)
+			string(contracts.PayPerTimeUtilization), // Head Contract uses pay_per_time_utilization
+			"",                                      // feePerDeployment
+			feePerTimeUnit,                          // feePerTimeUnit
+			timeUnit,                                // timeUnit
+			"", "", "", "",                          // feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit, feePerGPUPerTimeUnit
+			"",           // resourceTimeUnit
+			"",           // fixedRentalAmount
+			"minute",     // paymentPeriod
+			"1",          // paymentPeriodCount
+			startDate,    // startDate
+			endDate,      // endDate
+			"false",      // disable_billing: false for Contract A (Head Contract) - ENABLE BILLING
 			metadataJSON, // metadata: Head Contract role
 		)
 		suite.Require().NoError(err)
 
 		// Create Contract A
-		cmdOut, err := orchestrator.client.createContract(suite.T(), destinationFileA, orchestrator.dmsContext, orchestrator.password)
+		cmdOut, err := orchestrator.client.createContractRemote(suite.T(), destinationFileA, orchestrator.dmsContext, orchestrator.password, contractHostA.dmsDID)
 		suite.Require().NoError(err)
 		contractADID, err := getContractID(cmdOut)
 		suite.Require().NoError(err)
@@ -3222,7 +3280,7 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		)
 		suite.Require().NoError(err)
 
-		cmdOut, err = organization.client.createContract(suite.T(), destinationFileB1, organization.dmsContext, organization.password)
+		cmdOut, err = organization.client.createContractRemote(suite.T(), destinationFileB1, organization.dmsContext, organization.password, contractHostA.dmsDID)
 		suite.Require().NoError(err)
 		contractB1DID, err := getContractID(cmdOut)
 		suite.Require().NoError(err)
@@ -3249,7 +3307,7 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		)
 		suite.Require().NoError(err)
 
-		cmdOut, err = organization.client.createContract(suite.T(), destinationFileB2, organization.dmsContext, organization.password)
+		cmdOut, err = organization.client.createContractRemote(suite.T(), destinationFileB2, organization.dmsContext, organization.password, contractHostA.dmsDID)
 		suite.Require().NoError(err)
 		contractB2DID, err := getContractID(cmdOut)
 		suite.Require().NoError(err)
@@ -3257,17 +3315,34 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		// Wait for contract actors to start
 		time.Sleep(5 * time.Second)
 
-		// Approve Contract A (Organization signs)
-		_, err = organization.client.approveContracts(suite.T(), contractADID, organization.dmsContext, organization.password)
+		cmdOutput, err := orchestrator.client.approveContracts(suite.T(), contractADID, orchestrator.dmsContext, orchestrator.password)
 		suite.Require().NoError(err)
+		suite.Require().Contains(cmdOutput, "already signed")
+
+		// Approve Contract A (Organization signs)
+		cmdOutput, err = organization.client.approveContracts(suite.T(), contractADID, organization.dmsContext, organization.password)
+		suite.Require().NoError(err)
+		suite.Require().Contains(cmdOutput, `"success": true`)
+
+		// Approve Contract B1 (Organization signs)
+		cmdOutput, err = organization.client.approveContracts(suite.T(), contractB1DID, organization.dmsContext, organization.password)
+		suite.Require().NoError(err)
+		suite.Require().Contains(cmdOutput, "already signed")
 
 		// Approve Contract B1 (Provider 1 signs)
-		_, err = provider1.client.approveContracts(suite.T(), contractB1DID, provider1.dmsContext, provider1.password)
+		cmdOutput, err = provider1.client.approveContracts(suite.T(), contractB1DID, provider1.dmsContext, provider1.password)
 		suite.Require().NoError(err)
+		suite.Require().Contains(cmdOutput, `"success": true`)
+
+		// Approve Contract B1 (Organization signs)
+		cmdOutput, err = organization.client.approveContracts(suite.T(), contractB2DID, organization.dmsContext, organization.password)
+		suite.Require().NoError(err)
+		suite.Require().Contains(cmdOutput, "already signed")
 
 		// Approve Contract B2 (Provider 2 signs)
-		_, err = provider2.client.approveContracts(suite.T(), contractB2DID, provider2.dmsContext, provider2.password)
+		cmdOutput, err = provider2.client.approveContracts(suite.T(), contractB2DID, provider2.dmsContext, provider2.password)
 		suite.Require().NoError(err)
+		suite.Require().Contains(cmdOutput, `"success": true`)
 
 		time.Sleep(7 * time.Second)
 
@@ -3279,8 +3354,8 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		suite.Require().Equal("ACCEPTED", contractState)
 
 		// Step 4: Deploy with Contract A in ensemble config
-		srcFileEnsemble := filepath.Join(suite.testDataDir, "ensembles", "hello-contract.yaml")
-		destinationFileEnsemble := filepath.Join(orchestrator.config.WorkDir, "hello-contract-chain.yaml")
+		srcFileEnsemble := filepath.Join(suite.testDataDir, "ensembles", "hello-contract-chain.yaml")
+		destinationFileEnsemble := filepath.Join(orchestrator.config.WorkDir, "hello-contract-chain.output.yaml")
 		err = copyFile(srcFileEnsemble, destinationFileEnsemble)
 		suite.Require().NoError(err)
 
@@ -3288,9 +3363,7 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		contractsContent := `contracts:
   org_contract:
     did: "` + contractADID + `"
-    host: "` + contractHostA.dmsDID + `"
-    provider: "` + organization.dmsDID + `"
-    requestor: "` + orchestrator.dmsDID + `"`
+    host: "` + contractHostA.dmsDID + `"`
 		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
 		suite.Require().NoError(err)
 
@@ -3322,12 +3395,70 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		suite.Require().NoError(err)
 		suite.Require().NotEmpty(usageResponse.Results)
 
+		suite.T().Log("tail contract 1 billing results", usageResponse.Results)
+
+		// Assertions for Tail Contract B1 (PayPerAllocation)
+		foundB1 := false
+		for _, result := range usageResponse.Results {
+			if result.ContractDID == contractB1DID {
+				foundB1 = true
+				// Assertion 1: Verify no error
+				suite.Require().Empty(result.Error, "Tail Contract B1 billing should execute without errors")
+				// Assertion 2: Verify payment model is PayPerAllocation
+				suite.Require().Equal(
+					contracts.PayPerAllocation,
+					result.PaymentModel,
+					"Tail Contract B1 payment model should be pay_per_allocation")
+				// Assertion 3: Verify usages count > 0
+				suite.Require().Greater(
+					result.Usages,
+					0,
+					"Tail Contract B1 should have usages > 0")
+				// Assertion 4: Verify PayPerAllocation-specific fields
+				suite.Require().Nil(result.TimeUtilization, "Tail Contract B1 should not have TimeUtilization (PayPerAllocation)")
+				suite.Require().Nil(result.ResourceUtilization, "Tail Contract B1 should not have ResourceUtilization (PayPerAllocation)")
+				suite.Require().Nil(result.FixedRentalDetails, "Tail Contract B1 should not have FixedRentalDetails (PayPerAllocation)")
+				suite.Require().Nil(result.PeriodicDetails, "Tail Contract B1 should not have PeriodicDetails (PayPerAllocation)")
+				break
+			}
+		}
+		suite.Require().True(foundB1, "expected Tail Contract B1 should be in results")
+
 		// Calculate usages for Contract B2 (should only include Provider 2's usage)
 		calculateResp, err = contractHostA.client.calculateContractUsages(suite.T(), contractHostA.dmsContext, contractHostA.password, contractB2DID)
 		suite.Require().NoError(err)
 		err = json.Unmarshal([]byte(calculateResp), &usageResponse)
 		suite.Require().NoError(err)
 		suite.Require().NotEmpty(usageResponse.Results)
+
+		suite.T().Log("tail contract 2 results", usageResponse.Results)
+
+		// Assertions for Tail Contract B2 (PayPerAllocation)
+		foundB2 := false
+		for _, result := range usageResponse.Results {
+			if result.ContractDID == contractB2DID {
+				foundB2 = true
+				// Assertion 1: Verify no error
+				suite.Require().Empty(result.Error, "Tail Contract B2 billing should execute without errors")
+				// Assertion 2: Verify payment model is PayPerAllocation
+				suite.Require().Equal(
+					contracts.PayPerAllocation,
+					result.PaymentModel,
+					"Tail Contract B2 payment model should be pay_per_allocation")
+				// Assertion 3: Verify usages count > 0
+				suite.Require().Greater(
+					result.Usages,
+					0,
+					"Tail Contract B2 should have usages > 0")
+				// Assertion 4: Verify PayPerAllocation-specific fields
+				suite.Require().Nil(result.TimeUtilization, "Tail Contract B2 should not have TimeUtilization (PayPerAllocation)")
+				suite.Require().Nil(result.ResourceUtilization, "Tail Contract B2 should not have ResourceUtilization (PayPerAllocation)")
+				suite.Require().Nil(result.FixedRentalDetails, "Tail Contract B2 should not have FixedRentalDetails (PayPerAllocation)")
+				suite.Require().Nil(result.PeriodicDetails, "Tail Contract B2 should not have PeriodicDetails (PayPerAllocation)")
+				break
+			}
+		}
+		suite.Require().True(foundB2, "expected Tail Contract B2 should be in results")
 
 		// Step 6: Verify Head Contract billing works
 		// Contract A (Head Contract) should generate invoices based on head_contract_did
@@ -3338,6 +3469,8 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		suite.Require().Empty(usageResponse.Error, "Head Contract usage calculation should not have errors")
 		suite.Require().NotEmpty(usageResponse.Results, "Head Contract usage calculation should return results")
 
+		suite.T().Log("head contract billing results", usageResponse.Results)
+
 		// Find Contract A in results
 		found := false
 		for _, result := range usageResponse.Results {
@@ -3347,28 +3480,288 @@ func DeployWithContractChainTest(suite *TestSuite) {
 				// Assertion 1: Verify billing was executed (no error)
 				suite.Require().Empty(result.Error, "Head Contract billing should execute without errors")
 
-				// Assertion 2: Verify payment model is correct
+				// Assertion 2: Verify payment model is PayPerTimeUtilization
 				suite.Require().Equal(
-					contracts.PayPerAllocation,
+					contracts.PayPerTimeUtilization,
 					result.PaymentModel,
-					"Head Contract payment model should be pay_per_allocation")
+					"Head Contract payment model should be pay_per_time_utilization")
 
-				// Assertion 3: Verify correct usage count
-				// Head Contract should aggregate allocations from both providers
-				// With 2 providers and pay_per_allocation model, we expect allocations from both
-				suite.Require().Greater(
-					result.Usages,
-					0,
-					"Head Contract should have usages aggregated from all providers")
+				// Assertion 3: Verify PayPerTimeUtilization-specific fields
+				suite.Require().NotNil(result.TimeUtilization, "Head Contract should have TimeUtilization (PayPerTimeUtilization)")
+				suite.Require().NotEmpty(result.TimeUtilization.Deployments, "Head Contract TimeUtilization should have deployments")
+				// Verify deployment has allocations
+				totalUtilization := 0.0
+				for _, deployment := range result.TimeUtilization.Deployments {
+					suite.Require().NotEmpty(deployment.Allocations, "Deployment should have allocations")
+					totalUtilization += deployment.TotalUtilizationSec
+					for _, allocation := range deployment.Allocations {
+						suite.Require().NotEmpty(allocation.AllocationID, "Allocation should have AllocationID")
+						suite.Require().Greater(allocation.Duration.Seconds(), 0.0, "Allocation duration should be > 0")
+						suite.Require().False(allocation.StartTime.IsZero(), "Allocation should have StartTime")
+					}
+				}
+				suite.Require().Greater(totalUtilization, 0.0, "Total utilization should be > 0")
 
-				// Assertion 4: Verify the calculation is based on head_contract_did
+				// Assertion 4: Verify other payment model fields are nil
+				suite.Require().Nil(result.ResourceUtilization, "Head Contract should not have ResourceUtilization (PayPerTimeUtilization)")
+				suite.Require().Nil(result.FixedRentalDetails, "Head Contract should not have FixedRentalDetails (PayPerTimeUtilization)")
+				suite.Require().Nil(result.PeriodicDetails, "Head Contract should not have PeriodicDetails (PayPerTimeUtilization)")
+
+				// Assertion 5: Verify the calculation is based on head_contract_did
 				// (This is implicit - if billing works, it means it queried by head_contract_did correctly)
 				suite.T().Logf(
-					"Head Contract billing successful: ContractDID=%s, PaymentModel=%s, Usages=%d",
-					result.ContractDID, result.PaymentModel, result.Usages)
+					"Head Contract billing successful: ContractDID=%s, PaymentModel=%s, TotalUtilizationSec=%.2f",
+					result.ContractDID, result.PaymentModel, totalUtilization)
 				break
 			}
 		}
 		suite.Require().True(found, "expected Head Contract should be in results")
+
+		// Step 7: Verify transactions are generated correctly
+		// Wait for transactions to be created after usage calculation
+		time.Sleep(10 * time.Second)
+
+		// Step 7a: Verify Head Contract transactions at orchestrator side
+		// Orchestrator is the requestor in Head Contract, so should receive transactions to pay Organization
+		suite.T().Log("Checking Head Contract transactions at orchestrator side")
+		orchestratorOutput, err := orchestrator.client.listLocalTransactions(suite.T(), orchestrator.dmsContext, orchestrator.password)
+		suite.Require().NoError(err)
+
+		var orchestratorTxList contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(orchestratorOutput), &orchestratorTxList)
+		suite.Require().NoError(err)
+		suite.Require().Empty(orchestratorTxList.Error, "orchestrator transaction list should not have errors")
+
+		// Find transactions for Head Contract (Contract A)
+		var headContractTransactions []*transaction.Transaction
+		for _, tx := range orchestratorTxList.Transactions {
+			if tx.ContractDID == contractADID {
+				headContractTransactions = append(headContractTransactions, tx)
+			}
+		}
+		suite.Require().NotEmpty(headContractTransactions, "orchestrator should have transactions for Head Contract (Contract A)")
+
+		// Verify Head Contract transaction details
+		for _, tx := range headContractTransactions {
+			suite.Require().NotEmpty(tx.UniqueID, "Head Contract transaction should have UniqueID")
+			suite.Require().Equal(contractADID, tx.ContractDID, "Head Contract transaction should have correct ContractDID")
+			suite.Require().Equal("unpaid", tx.Status, "Head Contract transaction should be unpaid initially")
+			suite.Require().NotEmpty(tx.Amount, "Head Contract transaction should have Amount")
+			suite.T().Logf("Head Contract transaction at orchestrator: UniqueID=%s, Amount=%s, Status=%s", tx.UniqueID, tx.Amount, tx.Status)
+		}
+
+		// Step 7b: Verify Tail Contract transactions at organization side
+		// Organization is the requestor in Tail Contracts, so should receive transactions to pay Providers
+		suite.T().Log("Checking Tail Contract transactions at organization side")
+		organizationOutput, err := organization.client.listLocalTransactions(suite.T(), organization.dmsContext, organization.password)
+		suite.Require().NoError(err)
+
+		var organizationTxList contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(organizationOutput), &organizationTxList)
+		suite.Require().NoError(err)
+		suite.Require().Empty(organizationTxList.Error, "organization transaction list should not have errors")
+
+		// Find transactions for Tail Contract B1
+		var tailContractB1Transactions []*transaction.Transaction
+		for _, tx := range organizationTxList.Transactions {
+			if tx.ContractDID == contractB1DID {
+				tailContractB1Transactions = append(tailContractB1Transactions, tx)
+			}
+		}
+		suite.Require().NotEmpty(tailContractB1Transactions, "organization should have transactions for Tail Contract B1")
+
+		// Verify Tail Contract B1 transaction details
+		for _, tx := range tailContractB1Transactions {
+			suite.Require().NotEmpty(tx.UniqueID, "Tail Contract B1 transaction should have UniqueID")
+			suite.Require().Equal(contractB1DID, tx.ContractDID, "Tail Contract B1 transaction should have correct ContractDID")
+			suite.Require().Equal("unpaid", tx.Status, "Tail Contract B1 transaction should be unpaid initially")
+			suite.Require().NotEmpty(tx.Amount, "Tail Contract B1 transaction should have Amount")
+			suite.T().Logf("Tail Contract B1 transaction at organization: UniqueID=%s, Amount=%s, Status=%s", tx.UniqueID, tx.Amount, tx.Status)
+		}
+
+		// Find transactions for Tail Contract B2
+		var tailContractB2Transactions []*transaction.Transaction
+		for _, tx := range organizationTxList.Transactions {
+			if tx.ContractDID == contractB2DID {
+				tailContractB2Transactions = append(tailContractB2Transactions, tx)
+			}
+		}
+		// Note: B2 might not have transactions if it wasn't used in deployment
+		if len(tailContractB2Transactions) > 0 {
+			// Verify Tail Contract B2 transaction details
+			for _, tx := range tailContractB2Transactions {
+				suite.Require().NotEmpty(tx.UniqueID, "Tail Contract B2 transaction should have UniqueID")
+				suite.Require().Equal(contractB2DID, tx.ContractDID, "Tail Contract B2 transaction should have correct ContractDID")
+				suite.Require().Equal("unpaid", tx.Status, "Tail Contract B2 transaction should be unpaid initially")
+				suite.Require().NotEmpty(tx.Amount, "Tail Contract B2 transaction should have Amount")
+				suite.T().Logf("Tail Contract B2 transaction at organization: UniqueID=%s, Amount=%s, Status=%s", tx.UniqueID, tx.Amount, tx.Status)
+			}
+		} else {
+			suite.T().Log("No transactions found for Tail Contract B2 at organization (may not have been used in deployment)")
+		}
+
+		// Step 8: Confirm transactions and verify status changes
+		txHash := "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113e5f"
+
+		// Step 8a: Confirm Head Contract transaction at orchestrator side
+		if len(headContractTransactions) > 0 {
+			headTx := headContractTransactions[0]
+			suite.T().Logf("Confirming Head Contract transaction at orchestrator: %s", headTx.UniqueID)
+
+			confirmOutput, err := orchestrator.client.confirmLocalTransaction(suite.T(), orchestrator.dmsContext, orchestrator.password, headTx.UniqueID, txHash)
+			suite.Require().NoError(err, "Head Contract transaction confirmation should not fail")
+
+			var confirmResp contracts.ContractConfirmLocalTransactionResponse
+			err = json.Unmarshal([]byte(confirmOutput), &confirmResp)
+			suite.Require().NoError(err, "should be able to parse confirmation response")
+			// Note: confirmation may fail validation if txHash is not verified, but should not error on request
+			suite.T().Logf("Head Contract transaction confirmation response: Error=%s", confirmResp.Error)
+
+			// Wait for transaction status to be updated
+			time.Sleep(5 * time.Second)
+
+			// Verify transaction status
+			orchestratorOutput, err = orchestrator.client.listLocalTransactions(suite.T(), orchestrator.dmsContext, orchestrator.password)
+			suite.Require().NoError(err)
+
+			var respAfterConfirm contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(orchestratorOutput), &respAfterConfirm)
+			suite.Require().NoError(err)
+
+			var confirmedTx *transaction.Transaction
+			for _, tx := range respAfterConfirm.Transactions {
+				if tx.UniqueID == headTx.UniqueID {
+					confirmedTx = tx
+					break
+				}
+			}
+			suite.Require().NotNil(confirmedTx, "should find the confirmed Head Contract transaction")
+			suite.T().Logf("Head Contract transaction status after confirmation: %s", confirmedTx.Status)
+
+			// Verify payment status can be retrieved from payment validator
+			statusOutput, err := orchestrator.client.paymentStatus(suite.T(), orchestrator.dmsContext, orchestrator.password, headTx.UniqueID, paymentValidator.dmsDID)
+			suite.Require().NoError(err, "should be able to retrieve payment status for Head Contract")
+			suite.T().Logf("Head Contract payment status: %s", statusOutput)
+		}
+
+		// Step 8b: Confirm Tail Contract B1 transaction at organization side
+		if len(tailContractB1Transactions) > 0 {
+			tailB1Tx := tailContractB1Transactions[0]
+			suite.T().Logf("Confirming Tail Contract B1 transaction at organization: %s", tailB1Tx.UniqueID)
+
+			confirmOutput, err := organization.client.confirmLocalTransaction(suite.T(), organization.dmsContext, organization.password, tailB1Tx.UniqueID, txHash)
+			suite.Require().NoError(err, "Tail Contract B1 transaction confirmation should not fail")
+
+			var confirmResp contracts.ContractConfirmLocalTransactionResponse
+			err = json.Unmarshal([]byte(confirmOutput), &confirmResp)
+			suite.Require().NoError(err, "should be able to parse confirmation response")
+			suite.T().Logf("Tail Contract B1 transaction confirmation response: Error=%s", confirmResp.Error)
+
+			// Wait for transaction status to be updated
+			time.Sleep(5 * time.Second)
+
+			// Verify transaction status
+			organizationOutput, err = organization.client.listLocalTransactions(suite.T(), organization.dmsContext, organization.password)
+			suite.Require().NoError(err)
+
+			var respAfterConfirm contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(organizationOutput), &respAfterConfirm)
+			suite.Require().NoError(err)
+
+			var confirmedTx *transaction.Transaction
+			for _, tx := range respAfterConfirm.Transactions {
+				if tx.UniqueID == tailB1Tx.UniqueID {
+					confirmedTx = tx
+					break
+				}
+			}
+			suite.Require().NotNil(confirmedTx, "should find the confirmed Tail Contract B1 transaction")
+			suite.T().Logf("Tail Contract B1 transaction status after confirmation: %s", confirmedTx.Status)
+
+			// Verify payment status can be retrieved from payment validator
+			statusOutput, err := organization.client.paymentStatus(suite.T(), organization.dmsContext, organization.password, tailB1Tx.UniqueID, paymentValidator.dmsDID)
+			suite.Require().NoError(err, "should be able to retrieve payment status for Tail Contract B1")
+			suite.T().Logf("Tail Contract B1 payment status: %s", statusOutput)
+		}
+
+		// Step 8c: Confirm Tail Contract B2 transaction at organization side (if it exists)
+		if len(tailContractB2Transactions) > 0 {
+			tailB2Tx := tailContractB2Transactions[0]
+			suite.T().Logf("Confirming Tail Contract B2 transaction at organization: %s", tailB2Tx.UniqueID)
+
+			confirmOutput, err := organization.client.confirmLocalTransaction(suite.T(), organization.dmsContext, organization.password, tailB2Tx.UniqueID, txHash)
+			suite.Require().NoError(err, "Tail Contract B2 transaction confirmation should not fail")
+
+			var confirmResp contracts.ContractConfirmLocalTransactionResponse
+			err = json.Unmarshal([]byte(confirmOutput), &confirmResp)
+			suite.Require().NoError(err, "should be able to parse confirmation response")
+			suite.T().Logf("Tail Contract B2 transaction confirmation response: Error=%s", confirmResp.Error)
+
+			// Wait for transaction status to be updated
+			time.Sleep(5 * time.Second)
+
+			// Verify transaction status
+			organizationOutput, err = organization.client.listLocalTransactions(suite.T(), organization.dmsContext, organization.password)
+			suite.Require().NoError(err)
+
+			var respAfterConfirm contracts.ContractListLocalTransactionsResponse
+			err = json.Unmarshal([]byte(organizationOutput), &respAfterConfirm)
+			suite.Require().NoError(err)
+
+			var confirmedTx *transaction.Transaction
+			for _, tx := range respAfterConfirm.Transactions {
+				if tx.UniqueID == tailB2Tx.UniqueID {
+					confirmedTx = tx
+					break
+				}
+			}
+			suite.Require().NotNil(confirmedTx, "should find the confirmed Tail Contract B2 transaction")
+			suite.T().Logf("Tail Contract B2 transaction status after confirmation: %s", confirmedTx.Status)
+
+			// Verify payment status can be retrieved from payment validator
+			statusOutput, err := organization.client.paymentStatus(suite.T(), organization.dmsContext, organization.password, tailB2Tx.UniqueID, paymentValidator.dmsDID)
+			suite.Require().NoError(err, "should be able to retrieve payment status for Tail Contract B2")
+			suite.T().Logf("Tail Contract B2 payment status: %s", statusOutput)
+		}
+
+		// Step 9: Verify transaction metadata and amounts are correct
+		// Verify Head Contract transaction has correct payment model metadata
+		if len(headContractTransactions) > 0 {
+			headTx := headContractTransactions[0]
+			suite.Require().NotEmpty(headTx.Metadata, "Head Contract transaction should have metadata")
+			// For PayPerTimeUtilization, verify metadata contains expected fields
+			if paymentModel, ok := headTx.Metadata["payment_model"].(string); ok {
+				suite.Require().Equal(string(contracts.PayPerTimeUtilization), paymentModel, "Head Contract transaction metadata should have correct payment model")
+			}
+			suite.T().Logf("Head Contract transaction metadata: %+v", headTx.Metadata)
+		}
+
+		// Verify Tail Contract B1 transaction has correct payment model metadata
+		if len(tailContractB1Transactions) > 0 {
+			tailB1Tx := tailContractB1Transactions[0]
+			suite.Require().NotEmpty(tailB1Tx.Metadata, "Tail Contract B1 transaction should have metadata")
+			// For PayPerAllocation, verify metadata contains expected fields
+			if paymentModel, ok := tailB1Tx.Metadata["payment_model"].(string); ok {
+				suite.Require().Equal(string(contracts.PayPerAllocation), paymentModel, "Tail Contract B1 transaction metadata should have correct payment model")
+			}
+			if allocationCount, ok := tailB1Tx.Metadata["allocation_count"].(float64); ok {
+				suite.Require().Greater(allocationCount, 0.0, "Tail Contract B1 transaction should have allocation_count > 0")
+			}
+			suite.T().Logf("Tail Contract B1 transaction metadata: %+v", tailB1Tx.Metadata)
+		}
+
+		// Verify Tail Contract B2 transaction has correct payment model metadata (if exists)
+		if len(tailContractB2Transactions) > 0 {
+			tailB2Tx := tailContractB2Transactions[0]
+			suite.Require().NotEmpty(tailB2Tx.Metadata, "Tail Contract B2 transaction should have metadata")
+			// For PayPerAllocation, verify metadata contains expected fields
+			if paymentModel, ok := tailB2Tx.Metadata["payment_model"].(string); ok {
+				suite.Require().Equal(string(contracts.PayPerAllocation), paymentModel, "Tail Contract B2 transaction metadata should have correct payment model")
+			}
+			if allocationCount, ok := tailB2Tx.Metadata["allocation_count"].(float64); ok {
+				suite.Require().Greater(allocationCount, 0.0, "Tail Contract B2 transaction should have allocation_count > 0")
+			}
+			suite.T().Logf("Tail Contract B2 transaction metadata: %+v", tailB2Tx.Metadata)
+		}
 	})
 }

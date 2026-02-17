@@ -14,14 +14,12 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/tree"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/utils"
 	"gitlab.com/nunet/device-management-service/dms/jobs/parser/validate"
-	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/types"
 	cutils "gitlab.com/nunet/device-management-service/utils/convert"
 	vutils "gitlab.com/nunet/device-management-service/utils/validate"
@@ -36,7 +34,6 @@ var (
 	validEscalationStrategies        = [...]string{"redeploy", "teardown"}
 	validAllocationFailureStrategies = [...]string{"stay_down", "one_for_one", "one_for_all", "rest_for_one"}
 	validNodeFailureStrategies       = [...]string{"stay_down", "restart", "redeploy"}
-	validPaymentPeriods              = [...]string{"minute", "hour", "day", "week", "month"}
 )
 
 // NewEnsembleV1Validator creates a new validator for the NuNet configuration.
@@ -929,200 +926,31 @@ func ValidateSubnet(_ *map[string]any, data any, _ tree.Path) error {
 }
 
 // ValidateContract validates the contract configuration.
-// It checks that the contract has a valid DID and at least two parties.
+// It checks that the contract has a valid DID and host format.
+// Payment details are validated at contract creation time, not here.
 func ValidateContract(_ *map[string]any, data any, _ tree.Path) error {
 	contract, ok := data.(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid contract configuration: %v", data)
 	}
 
+	// Validate DID
 	did, ok := contract["did"].(string)
 	if !ok {
 		return fmt.Errorf("contract 'did' must be a string")
 	}
-
 	if !strings.HasPrefix(did, "did:") {
 		return fmt.Errorf("invalid did format")
 	}
 
-	// Validate payment_details.payment_model if present
-	if paymentDetails, ok := contract["payment_details"].(map[string]any); ok {
-		if paymentModel, ok := paymentDetails["payment_model"].(string); ok {
-
-			if paymentModel == "" {
-				return fmt.Errorf("payment_details.payment_model cannot be empty")
-			}
-
-			validPaymentModels := []string{
-				string(contracts.PayPerAllocation),
-				string(contracts.PayPerDeployment),
-				string(contracts.PayPerTimeUtilization),
-				string(contracts.PayPerResourceUtilization),
-				string(contracts.FixedRental),
-				string(contracts.Periodic),
-			}
-			if !slices.Contains(validPaymentModels, paymentModel) {
-				return fmt.Errorf("invalid payment_model %q: must be one of %v", paymentModel, validPaymentModels)
-			}
-
-			// Validate required fields based on payment model
-			switch paymentModel {
-			// Validate pay_per_time_utilization specific fields
-			case string(contracts.PayPerTimeUtilization):
-				if feePerTimeUnit, ok := paymentDetails["fee_per_time_unit"].(string); !ok || feePerTimeUnit == "" {
-					return fmt.Errorf("fee_per_time_unit is required for pay_per_time_utilization payment model")
-				}
-				timeUnit, ok := paymentDetails["time_unit"].(string)
-				if !ok || timeUnit == "" {
-					return fmt.Errorf("time_unit is required for pay_per_time_utilization payment model")
-				}
-				validTimeUnits := []string{"second", "minute", "hour"}
-				if !slices.Contains(validTimeUnits, timeUnit) {
-					return fmt.Errorf("invalid time_unit %q: must be one of %v", timeUnit, validTimeUnits)
-				}
-
-			// Validate pay_per_resource_utilization specific fields
-			case string(contracts.PayPerResourceUtilization):
-				requiredFields := map[string]string{
-					"fee_per_cpu_core_per_time_unit": "fee_per_cpu_core_per_time_unit",
-					"fee_per_ram_gb_per_time_unit":   "fee_per_ram_gb_per_time_unit",
-					"fee_per_disk_gb_per_time_unit":  "fee_per_disk_gb_per_time_unit",
-					"resource_time_unit":             "resource_time_unit",
-				}
-
-				for field, name := range requiredFields {
-					if val, ok := paymentDetails[field].(string); !ok || val == "" {
-						return fmt.Errorf("%s is required for pay_per_resource_utilization payment model", name)
-					}
-				}
-
-				validTimeUnits := []string{"second", "minute", "hour"}
-				timeUnit := paymentDetails["resource_time_unit"].(string)
-				if !slices.Contains(validTimeUnits, timeUnit) {
-					return fmt.Errorf("invalid resource_time_unit %q: must be one of %v", timeUnit, validTimeUnits)
-				}
-
-				// fee_per_gpu_per_time_unit is optional
-
-			// Validate fixed_rental specific fields
-			case string(contracts.FixedRental):
-				if err := validateFixedRental(paymentDetails); err != nil {
-					return err
-				}
-			// Validate periodic specific fields
-			case string(contracts.Periodic):
-				if err := validatePeriodic(paymentDetails); err != nil {
-					return err
-				}
-
-			case string(contracts.PayPerAllocation):
-				if err := validatePayPerAllocation(paymentDetails); err != nil {
-					return err
-				}
-
-			case string(contracts.PayPerDeployment):
-				if err := validatePayPerDeployment(paymentDetails); err != nil {
-					return err
-				}
-
-			default:
-				return fmt.Errorf("unsupported payment_model: %s", paymentModel)
-			}
-		} else {
-			return fmt.Errorf("payment_details.payment_model cannot be empty")
-		}
-	} else {
-		return fmt.Errorf("payment_details is required and must be an object")
-	}
-
-	return nil
-}
-
-// validatePayPerAllocation validates required fields for pay_per_allocation payment model
-func validatePayPerAllocation(paymentDetails map[string]any) error {
-	feesPerAllocation, ok := paymentDetails["fee_per_allocation"].(string)
-	if !ok || feesPerAllocation == "" {
-		return fmt.Errorf("fee_per_allocation is required for pay_per_allocation payment model and cannot be empty")
-	}
-	return nil
-}
-
-// validatePayPerDeployment validates required fields for pay_per_deployment payment model
-func validatePayPerDeployment(paymentDetails map[string]any) error {
-	feePerDeployment, ok := paymentDetails["fee_per_deployment"].(string)
-	if !ok || feePerDeployment == "" {
-		return fmt.Errorf("fee_per_deployment is required for pay_per_deployment payment model and cannot be empty")
-	}
-	return nil
-}
-
-func validatePeriodic(paymentDetails map[string]any) error {
-	// Validate fee_per_time_unit
-	feePerTimeUnit, ok := paymentDetails["fee_per_time_unit"].(string)
-	if !ok || feePerTimeUnit == "" {
-		return fmt.Errorf("fee_per_time_unit is required for periodic payment model")
-	}
-	if _, err := strconv.ParseFloat(feePerTimeUnit, 64); err != nil {
-		return fmt.Errorf("invalid fee_per_time_unit: %w", err)
-	}
-
-	// Validate time_unit
-	timeUnit, ok := paymentDetails["time_unit"].(string)
-	if !ok || timeUnit == "" {
-		return fmt.Errorf("time_unit is required for periodic payment model")
-	}
-	validTimeUnits := []string{"second", "minute", "hour"}
-	if !slices.Contains(validTimeUnits, timeUnit) {
-		return fmt.Errorf("invalid time_unit: %s, must be one of %v", timeUnit, validTimeUnits)
-	}
-
-	// Validate payment_period
-	period, ok := paymentDetails["payment_period"].(string)
-	if !ok || period == "" {
-		return fmt.Errorf("payment_period is required for periodic payment model")
-	}
-	if !slices.Contains(validPaymentPeriods[:], period) {
-		return fmt.Errorf("invalid payment_period: %s, must be one of %v", period, validPaymentPeriods)
-	}
-
-	// Validate payment_period_count (optional)
-	if count, ok := paymentDetails["payment_period_count"].(float64); ok { // JSON unmarshals numbers to float64
-		if count <= 0 || count != float64(int(count)) {
-			return fmt.Errorf("payment_period_count must be a positive integer")
+	// Validate host (if present)
+	if host, ok := contract["host"].(string); ok {
+		if !strings.HasPrefix(host, "did:") {
+			return fmt.Errorf("invalid host did format")
 		}
 	}
 
-	return nil
-}
-
-func validateFixedRental(paymentDetails map[string]any) error {
-	// Validate fixed_rental_amount
-	amount, ok := paymentDetails["fixed_rental_amount"].(string)
-	if !ok || amount == "" {
-		return fmt.Errorf("fixed_rental_amount is required for fixed_rental payment model")
-	}
-
-	if _, err := strconv.ParseFloat(amount, 64); err != nil {
-		return fmt.Errorf("invalid fixed_rental_amount: %w", err)
-	}
-
-	// Validate payment_period
-	period, ok := paymentDetails["payment_period"].(string)
-	if !ok || period == "" {
-		return fmt.Errorf("payment_period is required for fixed_rental payment model")
-	}
-	if !slices.Contains(validPaymentPeriods[:], period) {
-		return fmt.Errorf("invalid payment_period: %s, must be one of %v", period, validPaymentPeriods)
-	}
-
-	// Validate payment_period_count (optional, default: 1 - invoice every period)
-	// Example: payment_period_count=2 with payment_period="minute" means invoice every 2 minutes
-	if count, ok := paymentDetails["payment_period_count"].(float64); ok { // JSON unmarshals numbers to float64
-		if count <= 0 || count != float64(int(count)) {
-			return fmt.Errorf("payment_period_count must be a positive integer")
-		}
-	}
-
+	// Payment details are validated at contract creation time, not here
 	return nil
 }
 

@@ -93,6 +93,23 @@ func (c *Client) DeploymentManifest(ctx context.Context, req node.DeploymentMani
 	return response, nil
 }
 
+func (c *Client) DeploymentInfo(ctx context.Context, req node.DeploymentInfoRequest, opts ...Option) (node.DeploymentInfoResponse, error) {
+	var response node.DeploymentInfoResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.DeploymentInfoBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.DeploymentInfoBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
 func (c *Client) DeploymentShutdown(ctx context.Context, req node.DeploymentShutdownRequest, opts ...Option) (node.DeploymentShutdownResponse, error) {
 	var response node.DeploymentShutdownResponse
 

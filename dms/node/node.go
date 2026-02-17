@@ -276,7 +276,7 @@ func New(cfg config.Config, fs afero.Afero,
 		return nil, fmt.Errorf("create node actor: %w", err)
 	}
 
-	allocator := newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID)
+	allocator := newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID, contractStore)
 	ctx, cancel := context.WithCancel(context.Background())
 	n := &Node{
 		allocator:              allocator,
@@ -562,6 +562,9 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.DeploymentManifestBehavior: {
 			fn: n.handleDeploymentManifest,
 		},
+		behaviors.DeploymentInfoBehavior: {
+			fn: n.handleDeploymentInfo,
+		},
 		behaviors.DeploymentShutdownBehavior: {
 			fn: n.handleDeploymentShutdown,
 		},
@@ -693,6 +696,9 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		},
 		behaviors.ContractChainVerificationBehavior: {
 			fn: n.handleContractChainVerification,
+		},
+		behaviors.ContractInfoBehavior: {
+			fn: n.handleContractInfo,
 		},
 		behaviors.ContractConfirmLocalTransactionBehavior: {
 			fn: n.handleConfirmLocalTransaction,

@@ -753,6 +753,110 @@ func TestHandleDeploymentManifest(t *testing.T) {
 	})
 }
 
+func TestHandleDeploymentInfo(t *testing.T) {
+	t.Parallel()
+
+	// Add behavior to test
+	node, sActor, _ := newMockNodeWithSender(t, behaviors.DeploymentInfoBehavior)
+
+	// seed deployment data
+	eCfg := jobtypes.EnsembleConfig{
+		V1: &jobtypes.EnsembleConfigV1{
+			Allocations: map[string]jobtypes.AllocationConfig{},
+			Nodes:       map[string]jobtypes.NodeConfig{},
+			Supervisor:  jobtypes.SupervisorConfig{},
+			Subnet:      jobtypes.SubnetConfig{},
+		},
+	}
+	mockOrch, err := node.createOrchestrator(context.Background(), eCfg, nil)
+	require.NoError(t, err)
+	require.NotNil(t, mockOrch)
+	err = mockOrch.Deploy(time.Now().Add(2 * time.Minute))
+	require.NoError(t, err)
+
+	t.Run("non existent", func(t *testing.T) {
+		t.Parallel()
+
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentInfoBehavior,
+			DeploymentInfoRequest{
+				ID: "non-existent-id",
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		assert.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp DeploymentInfoResponse
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+		assert.Contains(t, resp.Error, orchestrator.ErrOrchestratorNotFound.Error())
+		assert.Empty(t, resp.ID)
+	})
+
+	t.Run("existing deployment basic info", func(t *testing.T) {
+		t.Parallel()
+
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentInfoBehavior,
+			DeploymentInfoRequest{
+				ID: mockOrch.ID(),
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		assert.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp DeploymentInfoResponse
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+		assert.Empty(t, resp.Error)
+		assert.Equal(t, mockOrch.ID(), resp.ID)
+		assert.NotNil(t, resp.Manifest)
+		assert.Contains(t, resp.Manifest.ID, mockOrch.ID())
+	})
+
+	t.Run("empty ID", func(t *testing.T) {
+		t.Parallel()
+
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentInfoBehavior,
+			DeploymentInfoRequest{
+				ID: "",
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		assert.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp DeploymentInfoResponse
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+		assert.Contains(t, resp.Error, "deployment ID is required")
+	})
+}
+
 func TestHandleDeploymentShutdown(t *testing.T) {
 	t.Parallel()
 

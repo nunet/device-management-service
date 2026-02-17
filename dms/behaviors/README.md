@@ -46,6 +46,8 @@ The following capabilities deal with onboarding the DMS node as compute provider
     - Description: Get the status of a deployment.
 - **DeploymentManifestBehavior**: `/dms/node/deployment/manifest`
     - Description: Get the manifest of a deployment.
+- **DeploymentInfoBehavior**: `/dms/node/deployment/info`
+    - Description: Get comprehensive information about a deployment including status, manifest, allocation details, optional resource usage, and optional log file paths. Logs are returned as file paths (not content) for optimal performance. This consolidates information from multiple behaviors into a single call.
 - **DeploymentShutdownBehavior**: `/dms/node/deployment/shutdown`
     - Description: Shutdown a deployment.
 

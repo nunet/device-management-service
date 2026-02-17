@@ -148,27 +148,27 @@ func convertToPRISMPublicKey(pk PRISMPublicKey) (*prismpb.PublicKey, error) {
 	if curve == "" {
 		// Detect from key size: Ed25519 is 32 bytes, Secp256k1 compressed is 33 bytes
 		if len(pk.Key) == ed25519.PublicKeySize { //nolint:gocritic
-			curve = "Ed25519"
+			curve = curveEd25519
 		} else if len(pk.Key) == 33 {
-			curve = "secp256k1"
+			curve = curveSecp256k1
 		} else {
 			return nil, fmt.Errorf("cannot auto-detect curve: key size %d bytes (expected 32 for Ed25519 or 33 for Secp256k1)", len(pk.Key))
 		}
 	}
 
 	switch curve {
-	case "Ed25519":
+	case curveEd25519:
 		// For Ed25519, we use ECKeyData with the full key in the x field
 		// (Ed25519 doesn't have separate x/y coordinates like secp256k1)
 		if len(pk.Key) != ed25519.PublicKeySize {
 			return nil, fmt.Errorf("Ed25519 key must be 32 bytes, got %d", len(pk.Key))
 		}
 		ecKeyData = &prismpb.ECKeyData{
-			Curve: "Ed25519",
+			Curve: curveEd25519,
 			X:     pk.Key, // For Ed25519, the full 32-byte key goes in X
 			Y:     nil,    // Ed25519 doesn't use Y coordinate
 		}
-	case "secp256k1":
+	case curveSecp256k1:
 		// For Secp256k1, we need to extract X and Y coordinates from compressed key
 		// Standard approach: Parse compressed key, then extract coordinates
 		xBytes, yBytes, err := extractSecp256k1Coordinates(pk.Key)
@@ -176,7 +176,7 @@ func convertToPRISMPublicKey(pk PRISMPublicKey) (*prismpb.PublicKey, error) {
 			return nil, fmt.Errorf("extract secp256k1 coordinates: %w", err)
 		}
 		ecKeyData = &prismpb.ECKeyData{
-			Curve: "secp256k1",
+			Curve: curveSecp256k1,
 			X:     xBytes,
 			Y:     yBytes,
 		}
@@ -279,7 +279,7 @@ func CreateSignedPRISMOperationSimple(
 		if len(pubKeyBytes) != ed25519.PublicKeySize {
 			return "", fmt.Errorf("expected Ed25519 public key (32 bytes), got %d bytes", len(pubKeyBytes))
 		}
-		curve = "Ed25519"
+		curve = curveEd25519
 		context = []string{
 			"https://www.w3.org/ns/did/v1",
 			"https://w3id.org/security/suites/ed25519-2020/v1",

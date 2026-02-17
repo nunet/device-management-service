@@ -1114,8 +1114,10 @@ func (c *ContractActor) sendPeriodicInvoice(
 		// which is set correctly based on whether deployment stopped during the period
 		periodEnd := periodicUsage.PeriodEnd
 
-		// Create unique ID for this deployment's invoice
-		uniqueID := fmt.Sprintf("%s-%d-periodic", deployment.DeploymentID, now.Unix())
+		// Generate unique ID for this deployment's invoice
+		// Note: UUID will be generated in PeriodicProcessor.CalculatePayment,
+		// this is just for the request identifier
+		uniqueID := uuid.NewString()
 
 		// Create PeriodicUsage for this single deployment
 		deploymentPeriodicUsage := &contracts.PeriodicUsage{

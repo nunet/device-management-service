@@ -237,7 +237,6 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("DeploymentWithContractChainTest", func(t *testing.T) {
-		t.Parallel()
 		deploymentWithContractChainTests := &TestSuite{
 			numNodes:            6,
 			Name:                "deployment_with_contract_chain_tests",

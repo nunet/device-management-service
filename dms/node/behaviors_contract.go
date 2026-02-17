@@ -91,6 +91,13 @@ func (n *Node) handleNewContract(msg actor.Envelope) {
 		handleErr(fmt.Errorf("unmarshal create contract request: %s", err))
 		return
 	}
+
+	// Validate required fields
+	if err := request.Validate(); err != nil {
+		handleErr(fmt.Errorf("invalid contract request: %w", err))
+		return
+	}
+
 	solutionEnablerDID = request.SolutionEnablerDID.String()
 
 	// Service provider path: forward to contract host, persist local copy, relay response.
@@ -104,8 +111,9 @@ func (n *Node) handleNewContract(msg actor.Envelope) {
 		return
 	}
 
+	creatorOfContract := msg.From
 	// Contract host path: existing behaviour
-	resp, err := n.createContractOnHost(request)
+	resp, err := n.createContractOnHost(request, creatorOfContract)
 	if err != nil {
 		handleErr(err)
 		return
@@ -114,10 +122,20 @@ func (n *Node) handleNewContract(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
-func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (contracts.CreateContractResponse, error) {
+func (n *Node) createContractOnHost(request contracts.CreateContractRequest, creatorOfContract actor.Handle) (contracts.CreateContractResponse, error) {
 	privKey, pubKey, err := crypto.GenerateKeyPair(crypto.Ed25519)
 	if err != nil {
 		return contracts.CreateContractResponse{}, fmt.Errorf("failed to generate contract keypair: %w", err)
+	}
+
+	// Validate payment details before creating contract
+	processor, err := contracts.GetPaymentModelProcessor(request.PaymentDetails.PaymentModel)
+	if err != nil {
+		return contracts.CreateContractResponse{}, fmt.Errorf("invalid payment model %q: %w", request.PaymentDetails.PaymentModel, err)
+	}
+
+	if err := processor.Validate(request.PaymentDetails); err != nil {
+		return contracts.CreateContractResponse{}, fmt.Errorf("invalid payment details: %w", err)
 	}
 
 	// Create forwardInvoice function to forward invoices from contract actor to payment validator
@@ -198,9 +216,15 @@ func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (co
 	// Store actor reference in map for O(1) lookup
 	n.addContractActor(contractActor)
 
-	go func() {
-		sigs, err := n.proposeContract(contractActor.ContractDID.URI)
-		if err == nil {
+	// if solution enabler, propose to parties
+	if request.SolutionEnablerDID.Equal(n.actor.Handle().DID) {
+		go func() {
+			sigs, err := n.proposeContract(contractActor.ContractDID.URI, creatorOfContract)
+			if err != nil {
+				log.Errorf("failed to propose contract: %w", err)
+				return
+			}
+
 			contractObj, err := n.contractStore.GetContract(contractActor.ContractDID.URI)
 			if err != nil {
 				log.Errorf("failed to get contract: %w", err)
@@ -222,8 +246,8 @@ func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (co
 			if err := n.contractStore.Upsert(contractObj); err != nil {
 				log.Errorf("failed to update contract with signatures: %w", err)
 			}
-		}
-	}()
+		}()
+	}
 
 	return contracts.CreateContractResponse{
 		ContractRequest: request,
@@ -281,12 +305,13 @@ func (n *Node) handleContractPropose(msg actor.Envelope) {
 		n.sendReply(msg, contracts.ProposeContractResponse{Error: err.Error()})
 	}
 
-	var incomingContract contracts.Contract
-	if err := json.Unmarshal(msg.Message, &incomingContract); err != nil {
+	var request contracts.ProposeContractRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		handleErr(fmt.Errorf("failed to unmarshal contract: %s", err))
 		return
 	}
-	contractID = incomingContract.ContractDID
+	incomingContract := request.Contract
+	contractID = request.Contract.ContractDID
 
 	provider, err := n.rootCap.Trust().GetProvider(n.actor.Security().DID())
 	if err != nil {
@@ -294,17 +319,29 @@ func (n *Node) handleContractPropose(msg actor.Envelope) {
 		return
 	}
 
-	// if requester, no need explicit approval
-	if incomingContract.ContractParticipants.Requestor.URI == provider.DID().URI {
+	providerDID := provider.DID()
+	isCreator := request.CreatorOfContract.DID.Equal(providerDID)
+	isRequestor := providerDID.Equal(incomingContract.ContractParticipants.Requestor)
+	isProvider := providerDID.Equal(incomingContract.ContractParticipants.Provider)
+
+	// Auto-sign if creator and is a participant
+	if isCreator && (isRequestor || isProvider) {
+		log.Infof("automatically signing contract for creator/requestor: %s", providerDID.URI)
 		sig, err := incomingContract.Sign(provider)
 		if err != nil {
-			handleErr(fmt.Errorf("failed to sign contract: %w", err))
+			handleErr(fmt.Errorf("failed to sign proposed contract: %w", err))
+			return
+		}
+
+		err = n.contractStore.Upsert(&incomingContract)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to save proposed contract in the db: %w", err))
 			return
 		}
 
 		n.sendReply(msg, contracts.ProposeContractResponse{
 			Signature: contracts.Signature{
-				DID:        provider.DID(),
+				DID:        providerDID,
 				Signatures: sig,
 			},
 		})
@@ -348,7 +385,7 @@ func (n *Node) handleContractPropose(msg actor.Envelope) {
 	})
 }
 
-func (n *Node) proposeContract(contractDID string) ([]contracts.Signature, error) {
+func (n *Node) proposeContract(contractDID string, creatorOfContract actor.Handle) ([]contracts.Signature, error) {
 	contractObj, err := n.contractStore.GetContract(contractDID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find contract %s: %w", contractDID, err)
@@ -365,7 +402,10 @@ func (n *Node) proposeContract(contractDID string) ([]contracts.Signature, error
 	}
 
 	propose := func(handle actor.Handle) (*contracts.Signature, error) {
-		envelope, err := n.invokeBehaviour(handle, behaviors.ContractProposeBehavior, *contractObj, invokeMessageTimeout)
+		envelope, err := n.invokeBehaviour(handle, behaviors.ContractProposeBehavior, contracts.ProposeContractRequest{
+			Contract:          *contractObj,
+			CreatorOfContract: creatorOfContract,
+		}, invokeMessageTimeout)
 		if envelope.Message != nil && err == nil {
 			var response contracts.ProposeContractResponse
 			err := json.Unmarshal(envelope.Message, &response)
@@ -582,6 +622,50 @@ func (n *Node) handleListIncomingContracts(msg actor.Envelope) {
 	resp := contracts.ContractListIncomingResponse{
 		Contracts: filteredLocal,
 	}
+	n.sendReply(msg, resp)
+}
+
+// handleContractInfo handles requests for contract information
+// This is used by deployment handlers to retrieve Provider and Requestor DIDs
+// from the contract host when they're not specified in the ensemble
+func (n *Node) handleContractInfo(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorw("handle_contract_info",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err)
+		n.sendReply(msg, behaviors.ContractInfoResponse{
+			OK:    false,
+			Error: err.Error(),
+		})
+	}
+
+	var req behaviors.ContractInfoRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		handleErr(fmt.Errorf("failed to unmarshal contract info request: %w", err))
+		return
+	}
+
+	if req.ContractDID == "" {
+		handleErr(errors.New("contract_did is required"))
+		return
+	}
+
+	// Get contract from store
+	contract, err := n.contractStore.GetContract(req.ContractDID)
+	if err != nil {
+		handleErr(fmt.Errorf("contract not found: %w", err))
+		return
+	}
+
+	// Return Provider and Requestor DIDs
+	resp := behaviors.ContractInfoResponse{
+		OK:        true,
+		Provider:  contract.ContractParticipants.Provider.String(),
+		Requestor: contract.ContractParticipants.Requestor.String(),
+	}
+
 	n.sendReply(msg, resp)
 }
 
@@ -929,6 +1013,7 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 		Amount:              tx.Amount,
 		Status:              "paid", // Mark as paid
 		TxHash:              req.TxHash,
+		Metadata:            tx.Metadata,
 	}
 
 	destination, err := actor.HandleFromDID(contract.ContractParticipants.Provider.URI)
@@ -1039,6 +1124,7 @@ func (n *Node) handleIncomingTransaction(msg actor.Envelope) {
 		Amount:              req.Amount,
 		Status:              req.Status, // Use provided status, or "" defaults to "unpaid" in Upsert
 		TxHash:              req.TxHash, // Use provided tx hash
+		Metadata:            req.Metadata,
 	})
 	if err != nil {
 		handleErr(fmt.Errorf("failed to insert transaction into the store: %w", err))

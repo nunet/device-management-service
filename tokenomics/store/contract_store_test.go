@@ -13,7 +13,10 @@ import (
 
 	"github.com/ostafen/clover/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func setupTestDB(t *testing.T) *Store {
@@ -132,4 +135,244 @@ func TestGetAllContracts(t *testing.T) {
 	for _, expected := range contracts {
 		assert.True(t, didSet[expected.ContractDID], "Expected contract %s not found", expected.ContractDID)
 	}
+}
+
+func TestFindTailContract_SingleTailContract(t *testing.T) {
+	store := setupTestDB(t)
+
+	// Organization DID (from Head Contract)
+	orgDID, err := did.FromString("did:org:123")
+	require.NoError(t, err)
+
+	// Compute Provider DID
+	providerDID, err := did.FromString("did:provider:456")
+	require.NoError(t, err)
+
+	// Create Head Contract (should be skipped)
+	headContract := &contracts.Contract{
+		ContractDID: "did:head:contract",
+		ContractParticipants: contracts.ContractParticipants{
+			Provider:  orgDID,
+			Requestor: did.DID{URI: "did:orchestrator:789"},
+		},
+		CurrentState: contracts.ContractAccepted,
+	}
+	err = store.Upsert(headContract)
+	require.NoError(t, err)
+
+	// Create Tail Contract (should be found)
+	tailContractObj := &contracts.Contract{
+		ContractDID: "did:tail:contract",
+		ContractParticipants: contracts.ContractParticipants{
+			Provider:  providerDID,
+			Requestor: orgDID,
+		},
+		CurrentState: contracts.ContractAccepted,
+	}
+	err = store.Upsert(tailContractObj)
+	require.NoError(t, err)
+
+	// Create unrelated contract (should not be found)
+	unrelatedContract := &contracts.Contract{
+		ContractDID: "did:unrelated:contract",
+		ContractParticipants: contracts.ContractParticipants{
+			Provider:  did.DID{URI: "did:other:provider"},
+			Requestor: did.DID{URI: "did:other:requestor"},
+		},
+		CurrentState: contracts.ContractAccepted,
+	}
+	err = store.Upsert(unrelatedContract)
+	require.NoError(t, err)
+
+	// Find Tail Contract
+	headContractConfig := types.ContractConfig{
+		DID:      "did:head:contract",
+		Provider: "did:org:123",
+	}
+	tailContractConfig, err := store.FindTailContract(headContractConfig, "did:provider:456")
+
+	require.NoError(t, err)
+	require.NotNil(t, tailContractConfig, "Should find exactly one Tail Contract")
+	assert.Equal(t, "did:tail:contract", tailContractConfig.DID)
+}
+
+func TestFindTailContract_MultipleTailContracts(t *testing.T) {
+	store := setupTestDB(t)
+
+	// Organization DID (from Head Contract)
+	orgDID, err := did.FromString("did:org:123")
+	require.NoError(t, err)
+
+	// Compute Provider DID
+	providerDID, err := did.FromString("did:provider:456")
+	require.NoError(t, err)
+
+	// Create multiple Tail Contracts
+	tailContract1 := &contracts.Contract{
+		ContractDID: "did:tail:contract:1",
+		ContractParticipants: contracts.ContractParticipants{
+			Provider:  providerDID,
+			Requestor: orgDID,
+		},
+		CurrentState: contracts.ContractAccepted,
+	}
+	err = store.Upsert(tailContract1)
+	require.NoError(t, err)
+
+	tailContract2 := &contracts.Contract{
+		ContractDID: "did:tail:contract:2",
+		ContractParticipants: contracts.ContractParticipants{
+			Provider:  providerDID,
+			Requestor: orgDID,
+		},
+		CurrentState: contracts.ContractActive,
+	}
+	err = store.Upsert(tailContract2)
+	require.NoError(t, err)
+
+	// Find Tail Contracts - should error when multiple are found
+	headContractConfig := types.ContractConfig{
+		DID:      "did:head:contract",
+		Provider: "did:org:123",
+	}
+	_, err = store.FindTailContract(headContractConfig, "did:provider:456")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "multiple tail contracts found")
+}
+
+func TestFindTailContract_NoTailContractFound(t *testing.T) {
+	store := setupTestDB(t)
+
+	// Find Tail Contract when none exists
+	headContractConfig := types.ContractConfig{
+		DID:      "did:head:contract",
+		Provider: "did:org:123",
+	}
+	tailContracts, err := store.FindTailContract(headContractConfig, "did:provider:456")
+
+	require.Error(t, err)
+	assert.Nil(t, tailContracts, "Should return nil when no Tail Contracts found")
+}
+
+func TestFindTailContract_InvalidHeadContractConfig(t *testing.T) {
+	store := setupTestDB(t)
+
+	// Missing Provider field
+	headContractConfig := types.ContractConfig{
+		DID: "did:head:contract",
+		// Provider is empty
+	}
+	_, err := store.FindTailContract(headContractConfig, "did:provider:456")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "head contract config is missing provider DID")
+}
+
+func TestFindTailContract_TailContractNotActive(t *testing.T) {
+	store := setupTestDB(t)
+
+	// Organization DID
+	orgDID, err := did.FromString("did:org:123")
+	require.NoError(t, err)
+
+	// Compute Provider DID
+	providerDID, err := did.FromString("did:provider:456")
+	require.NoError(t, err)
+
+	// Create Tail Contract in DRAFT state (should be excluded)
+	tailContractDraft := &contracts.Contract{
+		ContractDID: "did:tail:contract:draft",
+		ContractParticipants: contracts.ContractParticipants{
+			Provider:  providerDID,
+			Requestor: orgDID,
+		},
+		CurrentState: contracts.ContractDraft, // Not active
+	}
+	err = store.Upsert(tailContractDraft)
+	require.NoError(t, err)
+
+	// Create Tail Contract in ACCEPTED state (should be found)
+	tailContractActive := &contracts.Contract{
+		ContractDID: "did:tail:contract:active",
+		ContractParticipants: contracts.ContractParticipants{
+			Provider:  providerDID,
+			Requestor: orgDID,
+		},
+		CurrentState: contracts.ContractAccepted,
+	}
+	err = store.Upsert(tailContractActive)
+	require.NoError(t, err)
+
+	// Find Tail Contracts
+	headContractConfig := types.ContractConfig{
+		DID:      "did:head:contract",
+		Provider: "did:org:123",
+	}
+	tailContract, err := store.FindTailContract(headContractConfig, "did:provider:456")
+
+	require.NoError(t, err)
+	require.NotNil(t, tailContract, "Should find only active Tail Contract")
+	assert.Equal(t, "did:tail:contract:active", tailContract.DID)
+}
+
+func TestFindTailContract_HeadContractExistsLocally(t *testing.T) {
+	store := setupTestDB(t)
+
+	// Organization DID
+	orgDID, err := did.FromString("did:org:123")
+	require.NoError(t, err)
+
+	// Compute Provider DID
+	providerDID, err := did.FromString("did:provider:456")
+	require.NoError(t, err)
+
+	// Create Head Contract (exists locally, should be skipped)
+	headContract := &contracts.Contract{
+		ContractDID: "did:head:contract",
+		ContractParticipants: contracts.ContractParticipants{
+			Provider:  orgDID,
+			Requestor: did.DID{URI: "did:orchestrator:789"},
+		},
+		CurrentState: contracts.ContractAccepted,
+	}
+	err = store.Upsert(headContract)
+	require.NoError(t, err)
+
+	// Create Tail Contract
+	tailContractObj := &contracts.Contract{
+		ContractDID: "did:tail:contract",
+		ContractParticipants: contracts.ContractParticipants{
+			Provider:  providerDID,
+			Requestor: orgDID,
+		},
+		CurrentState: contracts.ContractAccepted,
+	}
+	err = store.Upsert(tailContractObj)
+	require.NoError(t, err)
+
+	// Find Tail Contracts (Head Contract should be skipped)
+	headContractConfig := types.ContractConfig{
+		DID:      "did:head:contract", // Same DID as local Head Contract
+		Provider: "did:org:123",
+	}
+	tailContractConfig, err := store.FindTailContract(headContractConfig, "did:provider:456")
+
+	require.NoError(t, err)
+	require.NotNil(t, tailContractConfig, "Should find Tail Contract but skip Head Contract")
+	assert.Equal(t, "did:tail:contract", tailContractConfig.DID)
+	assert.NotEqual(t, "did:head:contract", tailContractConfig.DID, "Head Contract should be skipped")
+}
+
+func TestFindTailContract_InvalidComputeProviderDID(t *testing.T) {
+	store := setupTestDB(t)
+
+	headContractConfig := types.ContractConfig{
+		DID:      "did:head:contract",
+		Provider: "did:org:123",
+	}
+	_, err := store.FindTailContract(headContractConfig, "invalid-did")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid compute provider DID")
 }

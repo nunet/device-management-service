@@ -36,6 +36,7 @@ const (
 	DeploymentLogsBehavior     = "/dms/node/deployment/logs"
 	DeploymentStatusBehavior   = "/dms/node/deployment/status"
 	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
+	DeploymentInfoBehavior     = "/dms/node/deployment/info"
 	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
 	DeploymentPruneBehavior    = "/dms/node/deployment/prune"
 	DeploymentDeleteBehavior   = "/dms/node/deployment/delete"
@@ -116,6 +117,7 @@ const (
 	ContractSignBehavior              = TokenomicNamespace + "/contract/sign"
 	ContractEventsBehavior            = TokenomicNamespace + "/contract/events"
 	ContractPaymentValidateBehavior   = TokenomicNamespace + "/contract/payment/validate"
+	ContractInfoBehavior              = TokenomicNamespace + "/contract/info"
 
 	// listened by payment validator for incoming payment verifications
 	ContractPaymentValidationRequestBehavior = TokenomicNamespace + "/contract/payment/validation/request"
@@ -161,3 +163,16 @@ var (
 		Static:          "undefined",
 	}
 )
+
+// ContractInfoRequest is used to request contract information from a contract host
+type ContractInfoRequest struct {
+	ContractDID string `json:"contract_did"` // Contract DID to retrieve information for
+}
+
+// ContractInfoResponse contains contract information returned by the contract host
+type ContractInfoResponse struct {
+	OK        bool   `json:"ok"`        // Whether the request was successful
+	Error     string `json:"error"`     // Error message if request failed
+	Provider  string `json:"provider"`  // Provider DID (from ContractParticipants.Provider)
+	Requestor string `json:"requestor"` // Requestor DID (from ContractParticipants.Requestor)
+}
