@@ -50,7 +50,17 @@
         "payment_period": "{{payment_period}}",
         "payment_period_count": {{payment_period_count}},
         "timestamp": "0001-01-01T00:00:00Z",
-        "payment_type": "blockchain"
+        "payment_type": "blockchain",
+        "orchestration_fee": {
+            "fixed_amount": "{{orchestration_fee_fixed_amount}}",
+            "percentage": "{{orchestration_fee_percentage}}",
+            "recipient_address": {
+                "requester_addr": "{{orchestration_fee_recipient_addr}}",
+                "provider_addr": "",
+                "currency": "NTX",
+                "blockchain": "ETHEREUM"
+            }
+        }
     },
     "contract_terms": "Standard contract terms",
     "contract_participants": {

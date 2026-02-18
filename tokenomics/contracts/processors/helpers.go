@@ -63,3 +63,9 @@ func processAllocationEndEvent(evt *usage.Usage) (allocationID string, ok bool) 
 func formatAmount(amount float64) string {
 	return fmt.Sprintf("%.8f", amount)
 }
+
+// FormatAmount formats a float64 amount as a string with 8 decimal places
+// This is the public version for use in other packages
+func FormatAmount(amount float64) string {
+	return fmt.Sprintf("%.8f", amount)
+}

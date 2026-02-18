@@ -23,11 +23,12 @@ type UsageData struct {
 
 // PaymentItem represents a single payment to process
 type PaymentItem struct {
-	UniqueID     string
-	DeploymentID string // Empty for non-deployment models
-	Amount       string
-	Usages       int
-	Metadata     map[string]interface{} // Model-specific metadata
+	UniqueID           string
+	DeploymentID       string // Empty for non-deployment models
+	Amount             string
+	Usages             int
+	Metadata           map[string]interface{} // Model-specific metadata
+	IsOrchestrationFee bool                   `json:"is_orchestration_fee,omitempty"` // Indicates if this is an orchestration fee transaction
 }
 
 // PaymentModelProcessor defines the clear, shared interface for all payment model processors.
