@@ -30,7 +30,7 @@ import (
 func TestE2E(t *testing.T) {
 	t.Parallel()
 	var (
-		testSuites         = 17
+		testSuites         = 19
 		totalPortsRequired = 2 * testSuites
 	)
 
@@ -240,8 +240,8 @@ func TestE2E(t *testing.T) {
 		deploymentWithContractChainTests := &TestSuite{
 			numNodes:            6,
 			Name:                "deployment_with_contract_chain_tests",
-			restPortIndex:       ports[28],
-			p2pPortIndex:        ports[29],
+			restPortIndex:       ports[34],
+			p2pPortIndex:        ports[35],
 			runner:              DeployWithContractChainTest,
 			capabilitiesHandler: setupContractChainCapabilities,
 		}
@@ -262,4 +262,14 @@ func TestE2E(t *testing.T) {
 	// 	}
 	// 	suite.Run(t, provisioningTask)
 	// })
+	t.Run("DeploymentWithContractOrchestrationFee", func(t *testing.T) {
+		deploymentWithContractOrchestrationFeeTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_contracts_orchestration_fee_tests",
+			restPortIndex: ports[36],
+			p2pPortIndex:  ports[37],
+			runner:        DeployWithContractOrchestrationFeeTest,
+		}
+		suite.Run(t, deploymentWithContractOrchestrationFeeTests)
+	})
 }

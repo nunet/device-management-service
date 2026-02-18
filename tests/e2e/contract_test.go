@@ -63,16 +63,21 @@ func DeployWithContractTest(suite *TestSuite) {
 
 		startDate := time.Now().Format(time.RFC3339)
 		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
-		err = replacePlaceholders(
-			destinationFile,
-			contractHost.dmsDID,
-			provider.dmsDID,
-			requester.dmsDID,
-			paymentValidator.dmsDID,
-			requesterEthAddr,
-			providerEthAddr,
-			feesPerAllocation,
-			string(contracts.PayPerAllocation), "", "", "", "", "", "", "", "", "", "minute", "1", startDate, endDate, "false", "")
+		err = replacePlaceholders(destinationFile, map[string]string{
+			"seDID":               contractHost.dmsDID,
+			"providerDID":         provider.dmsDID,
+			"requesterDID":        requester.dmsDID,
+			"paymentValidatorDID": paymentValidator.dmsDID,
+			"requesterAddr":       requesterEthAddr,
+			"providerAddr":        providerEthAddr,
+			"feesPerAllocation":   feesPerAllocation,
+			"paymentModel":        string(contracts.PayPerAllocation),
+			"resourceTimeUnit":    "minute",
+			"paymentPeriodCount":  "1",
+			"startDate":           startDate,
+			"endDate":             endDate,
+			"disableBilling":      "false",
+		})
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -398,17 +403,21 @@ func DeployWithContractCollectAfterPayTest(suite *TestSuite) {
 
 		startDate := time.Now().Format(time.RFC3339)
 		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
-		err = replacePlaceholders(
-			destinationFile,
-			contractHost.dmsDID,
-			provider.dmsDID,
-			requester.dmsDID,
-			paymentValidator.dmsDID,
-			requesterEthAddr,
-			providerEthAddr,
-			feesPerAllocation,
-			string(contracts.PayPerAllocation),
-			"", "", "", "", "", "", "", "", "", "minute", "1", startDate, endDate, "false", "")
+		err = replacePlaceholders(destinationFile, map[string]string{
+			"seDID":               contractHost.dmsDID,
+			"providerDID":         provider.dmsDID,
+			"requesterDID":        requester.dmsDID,
+			"paymentValidatorDID": paymentValidator.dmsDID,
+			"requesterAddr":       requesterEthAddr,
+			"providerAddr":        providerEthAddr,
+			"feesPerAllocation":   feesPerAllocation,
+			"paymentModel":        string(contracts.PayPerAllocation),
+			"resourceTimeUnit":    "minute",
+			"paymentPeriodCount":  "1",
+			"startDate":           startDate,
+			"endDate":             endDate,
+			"disableBilling":      "false",
+		})
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -647,18 +656,21 @@ func DeployWithContractPayPerDeploymentTest(suite *TestSuite) {
 
 		startDate := time.Now().Format(time.RFC3339)
 		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
-		err = replacePlaceholders(
-			destinationFile,
-			contractHost.dmsDID,
-			provider.dmsDID,
-			requester.dmsDID,
-			paymentValidator.dmsDID,
-			requesterEthAddr,
-			providerEthAddr,
-			"",
-			string(contracts.PayPerDeployment),
-			feePerDeployment,
-			"", "", "", "", "", "", "", "", "minute", "2", startDate, endDate, "false", "")
+		err = replacePlaceholders(destinationFile, map[string]string{
+			"seDID":               contractHost.dmsDID,
+			"providerDID":         provider.dmsDID,
+			"requesterDID":        requester.dmsDID,
+			"paymentValidatorDID": paymentValidator.dmsDID,
+			"requesterAddr":       requesterEthAddr,
+			"providerAddr":        providerEthAddr,
+			"paymentModel":        string(contracts.PayPerDeployment),
+			"feePerDeployment":    feePerDeployment,
+			"resourceTimeUnit":    "minute",
+			"paymentPeriodCount":  "2",
+			"startDate":           startDate,
+			"endDate":             endDate,
+			"disableBilling":      "false",
+		})
 		suite.Require().NoError(err)
 
 		fmt.Println("destinationFile", destinationFile)
@@ -955,26 +967,22 @@ func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
 
 		startDate := time.Now().Format(time.RFC3339)
 		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
-		err = replacePlaceholders(
-			destinationFile,
-			contractHost.dmsDID,
-			provider.dmsDID,
-			requester.dmsDID,
-			paymentValidator.dmsDID,
-			requesterEthAddr,
-			providerEthAddr,
-			"",
-			string(contracts.PayPerTimeUtilization),
-			"",
-			feePerTimeUnit,
-			timeUnit,
-			"",
-			"",
-			"",
-			"",
-			"",
-			"",
-			"minute", "5", startDate, endDate, "false", "")
+		err = replacePlaceholders(destinationFile, map[string]string{
+			"seDID":               contractHost.dmsDID,
+			"providerDID":         provider.dmsDID,
+			"requesterDID":        requester.dmsDID,
+			"paymentValidatorDID": paymentValidator.dmsDID,
+			"requesterAddr":       requesterEthAddr,
+			"providerAddr":        providerEthAddr,
+			"paymentModel":        string(contracts.PayPerTimeUtilization),
+			"feePerTimeUnit":      feePerTimeUnit,
+			"timeUnit":            timeUnit,
+			"resourceTimeUnit":    "minute",
+			"paymentPeriodCount":  "5",
+			"startDate":           startDate,
+			"endDate":             endDate,
+			"disableBilling":      "false",
+		})
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -1452,21 +1460,24 @@ func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
 
 		startDate := time.Now().Format(time.RFC3339)
 		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
-		err = replacePlaceholders(
-			destinationFile,
-			contractHost.dmsDID,
-			provider.dmsDID,
-			requester.dmsDID,
-			paymentValidator.dmsDID,
-			requesterEthAddr,
-			providerEthAddr,
-			"",
-			string(contracts.PayPerResourceUtilization),
-			"",
-			"",
-			"",
-			feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit,
-			"", resourceTimeUnit, "", "minute", "5", startDate, endDate, "false", "")
+		err = replacePlaceholders(destinationFile, map[string]string{
+			"seDID":                    contractHost.dmsDID,
+			"providerDID":              provider.dmsDID,
+			"requesterDID":             requester.dmsDID,
+			"paymentValidatorDID":      paymentValidator.dmsDID,
+			"requesterAddr":            requesterEthAddr,
+			"providerAddr":             providerEthAddr,
+			"paymentModel":             string(contracts.PayPerResourceUtilization),
+			"feePerCPUCorePerTimeUnit": feePerCPUCorePerTimeUnit,
+			"feePerRAMGBPerTimeUnit":   feePerRAMGBPerTimeUnit,
+			"feePerDiskGBPerTimeUnit":  feePerDiskGBPerTimeUnit,
+			"resourceTimeUnit":         resourceTimeUnit,
+			"paymentPeriod":            "minute",
+			"paymentPeriodCount":       "5",
+			"startDate":                startDate,
+			"endDate":                  endDate,
+			"disableBilling":           "false",
+		})
 		suite.Require().NoError(err)
 
 		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
@@ -2002,6 +2013,245 @@ func DeployWithContractsEnforcedProvidersTest(suite *TestSuite) {
 	})
 }
 
+// DeployWithContractOrchestrationFeeTest runs the tests that deploy with contracts and orchestration fees
+func DeployWithContractOrchestrationFeeTest(suite *TestSuite) {
+	suite.Run("dms with contracts and orchestration fees", func() {
+		requester := suite.nodes[0]
+		contractHost := suite.nodes[1]
+		provider := suite.nodes[2]
+		paymentValidator := suite.nodes[3]
+
+		// offboard this machine to not accept any bid request
+		contractHost.client.offboard(suite.T(), contractHost.userContext, contractHost.password)
+		paymentValidator.client.offboard(suite.T(), paymentValidator.userContext, paymentValidator.password)
+
+		srcFile := filepath.Join(suite.testDataDir, "contracts", "sample.json.sample")
+		destinationFile := filepath.Join(requester.config.WorkDir, "sample.json")
+		err := copyFile(srcFile, destinationFile)
+		suite.Require().NoError(err)
+
+		// random addresses
+		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750"
+		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
+		orchestrationFeeRecipientAddr := "0x1234567890123456789012345678901234567890" // Orchestration fee recipient
+
+		feesPerAllocation := "10"
+		orchestrationFeeFixedAmount := "1.00"
+		orchestrationFeePercentage := "2.5"
+
+		// rpc on port
+		go startMockRPC(9421)
+		suite.Require().Eventually(func() bool {
+			url := "http://localhost:9421/healthz"
+			return checkHealth(url)
+		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
+
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		err = replacePlaceholders(destinationFile, map[string]string{
+			"seDID":                         contractHost.dmsDID,
+			"providerDID":                   provider.dmsDID,
+			"requesterDID":                  requester.dmsDID,
+			"paymentValidatorDID":           paymentValidator.dmsDID,
+			"requesterAddr":                 requesterEthAddr,
+			"providerAddr":                  providerEthAddr,
+			"feesPerAllocation":             feesPerAllocation,
+			"paymentModel":                  string(contracts.PayPerAllocation),
+			"resourceTimeUnit":              "minute",
+			"paymentPeriodCount":            "1",
+			"startDate":                     startDate,
+			"endDate":                       endDate,
+			"orchestrationFeeFixedAmount":   orchestrationFeeFixedAmount,
+			"orchestrationFeePercentage":    orchestrationFeePercentage,
+			"orchestrationFeeRecipientAddr": orchestrationFeeRecipientAddr,
+		})
+		suite.Require().NoError(err)
+
+		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		// sleep until actor starts
+		time.Sleep(5 * time.Second)
+
+		contractDID, err := getContractID(cmdOut)
+		suite.Require().NoError(err)
+
+		// Validate and approve contract (same as DeployWithContractTest)
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err := extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
+
+		// Prepare ensemble file
+		srcFileEnsemble := filepath.Join(suite.testDataDir, "ensembles", "hello-contract.yaml")
+		destinationFileEnsemble := filepath.Join(requester.config.WorkDir, "hello-contract.yaml")
+		err = copyFile(srcFileEnsemble, destinationFileEnsemble)
+		suite.Require().NoError(err)
+		contractsContent := `contracts:
+  contract1:
+    did: "` + contractDID + `"
+    host: "` + contractHost.dmsDID + `"
+    payment_details:
+        payment_model: "` + string(contracts.PayPerAllocation) + `"
+        fee_per_allocation: "` + feesPerAllocation + `"`
+		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
+		suite.Require().NoError(err)
+
+		// Deploy before approval (should fail)
+		deploymentResult := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"), "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID := extractEnsembleID(deploymentResult)
+
+		time.Sleep(10 * time.Second)
+		status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+		suite.Require().NoError(err)
+		suite.Require().Equal(jobtypes.DeploymentStatusPreparing.String(), extractStatus(status))
+
+		// Approve contract
+		_, err = provider.client.approveContracts(suite.T(), contractDID, provider.dmsContext, provider.password)
+		suite.Require().NoError(err)
+
+		time.Sleep(7 * time.Second)
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		contractState, err := extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("ACCEPTED", contractState)
+
+		time.Sleep(time.Second * 6)
+
+		// Deploy after approval
+		deploymentResult = requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"), "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID = extractEnsembleID(deploymentResult)
+
+		// Wait until deployment is running
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment with contract did not reach Running status")
+
+		time.Sleep(10 * time.Second)
+
+		// Trigger manual billing
+		calculateResp, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err)
+
+		var usageResponse contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp), &usageResponse)
+		suite.Require().NoError(err, "failed to unmarshal usage calculation response")
+		suite.Require().Empty(usageResponse.Error, "usage calculation should not have errors")
+		suite.Require().NotEmpty(usageResponse.Results, "usage calculation should return results")
+
+		// Verify primary transaction was created
+		time.Sleep(10 * time.Second)
+		output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		var txList contracts.ContractListLocalTransactionsResponse
+		err = json.Unmarshal([]byte(output), &txList)
+		suite.Require().NoError(err)
+
+		// Find primary transaction (non-orchestration fee)
+		var primaryTx *transaction.Transaction
+		var orchestrationFeeTx *transaction.Transaction
+		for _, tx := range txList.Transactions {
+			if tx.ContractDID == contractDID {
+				// Check if this is an orchestration fee transaction by examining unique ID
+				// Orchestration fee transactions have unique IDs ending with "-orchestration-fee"
+				if strings.HasSuffix(tx.UniqueID, "-orchestration-fee") {
+					orchestrationFeeTx = tx
+				} else {
+					primaryTx = tx
+				}
+			}
+		}
+
+		// Assertions for primary transaction
+		suite.Require().NotNil(primaryTx, "primary payment transaction should be created")
+		suite.Require().Equal("unpaid", primaryTx.Status, "primary transaction should be unpaid initially")
+		suite.Require().NotEmpty(primaryTx.UniqueID, "primary transaction should have unique ID")
+		suite.Require().Equal(contractDID, primaryTx.ContractDID, "primary transaction should have correct contract DID")
+
+		// Assertions for orchestration fee transaction
+		suite.Require().NotNil(orchestrationFeeTx, "orchestration fee transaction should be created")
+		suite.Require().Equal("unpaid", orchestrationFeeTx.Status, "orchestration fee transaction should be unpaid initially")
+		suite.Require().NotEmpty(orchestrationFeeTx.UniqueID, "orchestration fee transaction should have unique ID")
+		suite.Require().True(
+			strings.HasSuffix(orchestrationFeeTx.UniqueID, "-orchestration-fee"),
+			"orchestration fee transaction unique ID should end with '-orchestration-fee'",
+		)
+		suite.Require().Equal(contractDID, orchestrationFeeTx.ContractDID, "orchestration fee transaction should have correct contract DID")
+
+		// Verify orchestration fee amount calculation
+		// Expected: fixed_amount + (primary_amount * percentage / 100)
+		primaryAmount, err := strconv.ParseFloat(primaryTx.Amount, 64)
+		suite.Require().NoError(err, "failed to parse primary transaction amount")
+
+		expectedFixedFee, err := strconv.ParseFloat(orchestrationFeeFixedAmount, 64)
+		suite.Require().NoError(err, "failed to parse orchestration fee fixed amount")
+
+		expectedPercentage, err := strconv.ParseFloat(orchestrationFeePercentage, 64)
+		suite.Require().NoError(err, "failed to parse orchestration fee percentage")
+
+		expectedOrchestrationFee := expectedFixedFee + (primaryAmount * expectedPercentage / 100.0)
+		actualOrchestrationFee, err := strconv.ParseFloat(orchestrationFeeTx.Amount, 64)
+		suite.Require().NoError(err, "failed to parse orchestration fee transaction amount")
+
+		// Allow small floating point differences (0.01)
+		suite.Require().InDelta(
+			expectedOrchestrationFee,
+			actualOrchestrationFee,
+			0.01,
+			"orchestration fee amount should match expected calculation: fixed_amount + (primary_amount * percentage / 100)",
+		)
+
+		// Verify orchestration fee recipient address (if specified)
+		if orchestrationFeeRecipientAddr != "" {
+			suite.Require().NotEmpty(
+				orchestrationFeeTx.ToAddress,
+				"orchestration fee transaction should have recipient address",
+			)
+			if len(orchestrationFeeTx.ToAddress) > 0 {
+				suite.Require().Equal(
+					orchestrationFeeRecipientAddr,
+					orchestrationFeeTx.ToAddress[0].RequesterAddr,
+					"orchestration fee transaction should use specified recipient address",
+				)
+			}
+		}
+
+		// Verify that both transactions are independent (different unique IDs)
+		suite.Require().NotEqual(
+			primaryTx.UniqueID,
+			orchestrationFeeTx.UniqueID,
+			"primary and orchestration fee transactions should have different unique IDs",
+		)
+
+		suite.T().Logf(
+			"Primary transaction: %s, Amount: %s",
+			primaryTx.UniqueID,
+			primaryTx.Amount,
+		)
+		suite.T().Logf(
+			"Orchestration fee transaction: %s, Amount: %s (Expected: %.2f)",
+			orchestrationFeeTx.UniqueID,
+			orchestrationFeeTx.Amount,
+			expectedOrchestrationFee,
+		)
+	})
+}
+
 func getContractID(input string) (string, error) {
 	var response contracts.CreateContractResponse
 	if err := json.Unmarshal([]byte(input), &response); err != nil {
@@ -2043,25 +2293,23 @@ func extractValidationResponse(input string) (string, error) {
 	return match[1], nil
 }
 
-func replacePlaceholders(
-	filePath,
-	seDID,
-	providerDID,
-	requesterDID,
-	paymentValidatorDID,
-	requesterAddr,
-	providerAddr,
-	feesPerAllocation,
-	paymentModel,
-	feePerDeployment,
-	feePerTimeUnit,
-	timeUnit,
-	feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit, feePerGPUPerTimeUnit, //nolint:unparam
-	resourceTimeUnit, fixedRentalAmount, paymentPeriod, paymentPeriodCount, startDate, endDate, disableBilling, metadata string, //nolint:unparam
-) error {
+func replacePlaceholders(filePath string, args map[string]string) error {
 	if filePath == "" {
 		return fmt.Errorf("filePath is empty")
 	}
+
+	// Helper function to get value from map with default
+	getValue := func(key, defaultValue string) string {
+		if val, ok := args[key]; ok && val != "" {
+			return val
+		}
+		return defaultValue
+	}
+
+	// Validate required DIDs
+	seDID := getValue("seDID", "")
+	providerDID := getValue("providerDID", "")
+	requesterDID := getValue("requesterDID", "")
 	if seDID == "" || providerDID == "" || requesterDID == "" {
 		return fmt.Errorf("one or more DIDs are empty")
 	}
@@ -2070,6 +2318,31 @@ func replacePlaceholders(
 	if err != nil {
 		return fmt.Errorf("read error: %w", err)
 	}
+
+	// Get all values with defaults
+	paymentValidatorDID := getValue("paymentValidatorDID", "")
+	requesterAddr := getValue("requesterAddr", "")
+	providerAddr := getValue("providerAddr", "")
+	feesPerAllocation := getValue("feesPerAllocation", "")
+	paymentModel := getValue("paymentModel", "")
+	feePerDeployment := getValue("feePerDeployment", "")
+	feePerTimeUnit := getValue("feePerTimeUnit", "")
+	timeUnit := getValue("timeUnit", "")
+	feePerCPUCorePerTimeUnit := getValue("feePerCPUCorePerTimeUnit", "")
+	feePerRAMGBPerTimeUnit := getValue("feePerRAMGBPerTimeUnit", "")
+	feePerDiskGBPerTimeUnit := getValue("feePerDiskGBPerTimeUnit", "")
+	feePerGPUPerTimeUnit := getValue("feePerGPUPerTimeUnit", "")
+	resourceTimeUnit := getValue("resourceTimeUnit", "")
+	fixedRentalAmount := getValue("fixedRentalAmount", "")
+	paymentPeriod := getValue("paymentPeriod", "")
+	paymentPeriodCount := getValue("paymentPeriodCount", "1")
+	startDate := getValue("startDate", "")
+	endDate := getValue("endDate", "")
+	disableBilling := getValue("disableBilling", "false")
+	orchestrationFeeFixedAmount := getValue("orchestrationFeeFixedAmount", "")
+	orchestrationFeePercentage := getValue("orchestrationFeePercentage", "")
+	orchestrationFeeRecipientAddr := getValue("orchestrationFeeRecipientAddr", "")
+	metadata := getValue("metadata", "")
 
 	updatedContent := strings.ReplaceAll(string(content), "{{solutionEnablerDID}}", seDID)
 	updatedContent = strings.ReplaceAll(updatedContent, "{{providerDID}}", providerDID)
@@ -2089,16 +2362,9 @@ func replacePlaceholders(
 	updatedContent = strings.ReplaceAll(updatedContent, "{{resource_time_unit}}", resourceTimeUnit)
 	updatedContent = strings.ReplaceAll(updatedContent, "{{fixed_rental_amount}}", fixedRentalAmount)
 	updatedContent = strings.ReplaceAll(updatedContent, "{{payment_period}}", paymentPeriod)
-	updatedContent = strings.ReplaceAll(updatedContent, "{{fee_per_deployment}}", feePerDeployment)
-	if paymentPeriodCount == "" {
-		paymentPeriodCount = "1"
-	}
 	updatedContent = strings.ReplaceAll(updatedContent, "{{payment_period_count}}", paymentPeriodCount)
 	updatedContent = strings.ReplaceAll(updatedContent, "{{start_date}}", startDate)
 	updatedContent = strings.ReplaceAll(updatedContent, "{{end_date}}", endDate)
-	if disableBilling == "" {
-		disableBilling = "false"
-	}
 	updatedContent = strings.ReplaceAll(updatedContent, "{{disable_billing}}", disableBilling)
 
 	// Handle metadata: if provided, add it as JSON; otherwise, remove the placeholder
@@ -2108,6 +2374,10 @@ func replacePlaceholders(
 		updatedContent = strings.ReplaceAll(updatedContent, "{{metadata}}", "")
 	}
 
+	// Add orchestration fee replacements
+	updatedContent = strings.ReplaceAll(updatedContent, "{{orchestration_fee_fixed_amount}}", orchestrationFeeFixedAmount)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{orchestration_fee_percentage}}", orchestrationFeePercentage)
+	updatedContent = strings.ReplaceAll(updatedContent, "{{orchestration_fee_recipient_addr}}", orchestrationFeeRecipientAddr)
 	if err := os.WriteFile(filePath, []byte(updatedContent), 0o644); err != nil {
 		return fmt.Errorf("write error: %w", err)
 	}
@@ -2285,32 +2555,21 @@ func DeployWithContractFixedRentalTest(suite *TestSuite) {
 		startDate := time.Now().Format(time.RFC3339)
 		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
 		// Replace placeholders in contract JSON
-		err = replacePlaceholders(
-			destinationFile,
-			contractHost.dmsDID,
-			provider.dmsDID,
-			requester.dmsDID,
-			paymentValidator.dmsDID,
-			requesterEthAddr,
-			providerEthAddr,
-			"", // feesPerAllocation
-			string(contracts.FixedRental),
-			"", // feePerDeployment
-			"", // feePerTimeUnit
-			"", // timeUnit
-			"", // feePerCPUCorePerTimeUnit
-			"", // feePerRAMGBPerTimeUnit
-			"", // feePerDiskGBPerTimeUnit
-			"", // feePerGPUPerTimeUnit
-			"", // resourceTimeUnit
-			fixedRentalAmount,
-			paymentPeriod,
-			paymentPeriodCount,
-			startDate,
-			endDate,
-			"false",
-			"",
-		)
+		err = replacePlaceholders(destinationFile, map[string]string{
+			"seDID":               contractHost.dmsDID,
+			"providerDID":         provider.dmsDID,
+			"requesterDID":        requester.dmsDID,
+			"paymentValidatorDID": paymentValidator.dmsDID,
+			"requesterAddr":       requesterEthAddr,
+			"providerAddr":        providerEthAddr,
+			"paymentModel":        string(contracts.FixedRental),
+			"fixedRentalAmount":   fixedRentalAmount,
+			"paymentPeriod":       paymentPeriod,
+			"paymentPeriodCount":  paymentPeriodCount,
+			"startDate":           startDate,
+			"endDate":             endDate,
+			"disableBilling":      "false",
+		})
 		suite.Require().NoError(err)
 
 		// Create contract
@@ -2614,32 +2873,22 @@ func DeployWithContractPeriodicTest(suite *TestSuite) {
 		startDate := time.Now().Format(time.RFC3339)
 		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
 		// Replace placeholders in contract JSON
-		err = replacePlaceholders(
-			destinationFile,
-			contractHost.dmsDID,
-			provider.dmsDID,
-			requester.dmsDID,
-			paymentValidator.dmsDID,
-			requesterEthAddr,
-			providerEthAddr,
-			"", // feesPerAllocation
-			string(contracts.Periodic),
-			"", // feePerDeployment
-			feePerTimeUnit,
-			timeUnit,
-			"", // feePerCPUCorePerTimeUnit
-			"", // feePerRAMGBPerTimeUnit
-			"", // feePerDiskGBPerTimeUnit
-			"", // feePerGPUPerTimeUnit
-			"", // resourceTimeUnit
-			"", // fixedRentalAmount
-			paymentPeriod,
-			paymentPeriodCount,
-			startDate,
-			endDate,
-			"false",
-			"",
-		)
+		err = replacePlaceholders(destinationFile, map[string]string{
+			"seDID":               contractHost.dmsDID,
+			"providerDID":         provider.dmsDID,
+			"requesterDID":        requester.dmsDID,
+			"paymentValidatorDID": paymentValidator.dmsDID,
+			"requesterAddr":       requesterEthAddr,
+			"providerAddr":        providerEthAddr,
+			"paymentModel":        string(contracts.Periodic),
+			"feePerTimeUnit":      feePerTimeUnit,
+			"timeUnit":            timeUnit,
+			"paymentPeriod":       paymentPeriod,
+			"paymentPeriodCount":  paymentPeriodCount,
+			"startDate":           startDate,
+			"endDate":             endDate,
+			"disableBilling":      "false",
+		})
 		suite.Require().NoError(err)
 
 		// Create contract
@@ -3222,31 +3471,22 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		metadataJSON := fmt.Sprintf(`{"%s": "%s"}`, contracts.ContractChainRoleMetadataKey, contracts.ContractChainRoleHead)
 
 		// Replace placeholders for Contract A
-		feePerTimeUnit := defaultFeePerTimeUnit // $0.01 per second for PayPerTimeUtilization
-		timeUnit := "second"                    // Time unit for PayPerTimeUtilization
-		err = replacePlaceholders(
-			destinationFileA,
-			contractHostA.dmsDID,                         // Contract host
-			organization.dmsDID,                          // Provider (Organization)
-			orchestrator.dmsDID,                          // Requestor (Orchestrator)
-			paymentValidator.dmsDID,                      // Payment validator
-			"0xe66b31678d6c16e9ebf358268a790b763c133750", // Orchestrator ETH address
-			"0x4741783ed607d1496f65749d2d9c94cf6c23352a", // Organization ETH address
-			"",                                      // Fees (not used for PayPerTimeUtilization)
-			string(contracts.PayPerTimeUtilization), // Head Contract uses pay_per_time_utilization
-			"",                                      // feePerDeployment
-			feePerTimeUnit,                          // feePerTimeUnit
-			timeUnit,                                // timeUnit
-			"", "", "", "",                          // feePerCPUCorePerTimeUnit, feePerRAMGBPerTimeUnit, feePerDiskGBPerTimeUnit, feePerGPUPerTimeUnit
-			"",           // resourceTimeUnit
-			"",           // fixedRentalAmount
-			"minute",     // paymentPeriod
-			"1",          // paymentPeriodCount
-			startDate,    // startDate
-			endDate,      // endDate
-			"false",      // disable_billing: false for Contract A (Head Contract) - ENABLE BILLING
-			metadataJSON, // metadata: Head Contract role
-		)
+		err = replacePlaceholders(destinationFileA, map[string]string{
+			"seDID":               contractHostA.dmsDID,
+			"providerDID":         organization.dmsDID,
+			"requesterDID":        orchestrator.dmsDID,
+			"paymentValidatorDID": paymentValidator.dmsDID,
+			"requesterAddr":       "0xe66b31678d6c16e9ebf358268a790b763c133750",
+			"providerAddr":        "0x4741783ed607d1496f65749d2d9c94cf6c23352a",
+			"feesPerAllocation":   "10",
+			"paymentModel":        string(contracts.PayPerAllocation),
+			"resourceTimeUnit":    "minute",
+			"paymentPeriodCount":  "1",
+			"startDate":           startDate,
+			"endDate":             endDate,
+			"disableBilling":      "false",
+			"metadata":            metadataJSON,
+		})
 		suite.Require().NoError(err)
 
 		// Create Contract A
@@ -3265,19 +3505,21 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		suite.Require().NoError(err)
 
 		// Replace placeholders for Contract B1
-		err = replacePlaceholders(
-			destinationFileB1,
-			contractHostA.dmsDID, // Contract host (can be same or different)
-			provider1.dmsDID,     // Provider (Provider 1)
-			organization.dmsDID,  // Requestor (Organization)
-			paymentValidator.dmsDID,
-			"0x4741783ed607d1496f65749d2d9c94cf6c23352a", // Organization ETH address
-			"0xe66b31678d6c16e9ebf358268a790b763c133750", // Provider 1 ETH address
-			"10",
-			string(contracts.PayPerAllocation),
-			"", "", "", "", "", "", "", "", "", "minute", "1", startDate, endDate, "false", // disable_billing: false for Contract B1
-			"", // metadata: empty for Tail Contract
-		)
+		err = replacePlaceholders(destinationFileB1, map[string]string{
+			"seDID":               contractHostA.dmsDID,
+			"providerDID":         provider1.dmsDID,
+			"requesterDID":        organization.dmsDID,
+			"paymentValidatorDID": paymentValidator.dmsDID,
+			"requesterAddr":       "0x4741783ed607d1496f65749d2d9c94cf6c23352a",
+			"providerAddr":        "0xe66b31678d6c16e9ebf358268a790b763c133750",
+			"feesPerAllocation":   "10",
+			"paymentModel":        string(contracts.PayPerAllocation),
+			"resourceTimeUnit":    "minute",
+			"paymentPeriodCount":  "1",
+			"startDate":           startDate,
+			"endDate":             endDate,
+			"disableBilling":      "false",
+		})
 		suite.Require().NoError(err)
 
 		cmdOut, err = organization.client.createContractRemote(suite.T(), destinationFileB1, organization.dmsContext, organization.password, contractHostA.dmsDID)
@@ -3292,19 +3534,21 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		suite.Require().NoError(err)
 
 		// Replace placeholders for Contract B2
-		err = replacePlaceholders(
-			destinationFileB2,
-			contractHostA.dmsDID,
-			provider2.dmsDID,    // Provider (Provider 2)
-			organization.dmsDID, // Requestor (Organization)
-			paymentValidator.dmsDID,
-			"0x4741783ed607d1496f65749d2d9c94cf6c23352a",
-			"0xe66b31678d6c16e9ebf358268a790b763c133750", // Provider 2 ETH address
-			"10",
-			string(contracts.PayPerAllocation),
-			"", "", "", "", "", "", "", "", "", "minute", "1", startDate, endDate, "false", // disable_billing: false for Contract B2
-			"", // metadata: empty for Tail Contract
-		)
+		err = replacePlaceholders(destinationFileB2, map[string]string{
+			"seDID":               contractHostA.dmsDID,
+			"providerDID":         provider2.dmsDID,
+			"requesterDID":        organization.dmsDID,
+			"paymentValidatorDID": paymentValidator.dmsDID,
+			"requesterAddr":       "0x4741783ed607d1496f65749d2d9c94cf6c23352a",
+			"providerAddr":        "0xe66b31678d6c16e9ebf358268a790b763c133750",
+			"feesPerAllocation":   "10",
+			"paymentModel":        string(contracts.PayPerAllocation),
+			"resourceTimeUnit":    "minute",
+			"paymentPeriodCount":  "1",
+			"startDate":           startDate,
+			"endDate":             endDate,
+			"disableBilling":      "false",
+		})
 		suite.Require().NoError(err)
 
 		cmdOut, err = organization.client.createContractRemote(suite.T(), destinationFileB2, organization.dmsContext, organization.password, contractHostA.dmsDID)

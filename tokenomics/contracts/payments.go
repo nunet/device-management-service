@@ -9,6 +9,8 @@
 package contracts
 
 import (
+	"fmt"
+	"strconv"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/types"
@@ -77,4 +79,59 @@ type PaymentDetails struct {
 	PaymentPeriodCount int    `json:"payment_period_count,omitempty"` // Number of periods to wait before invoicing (default: 1). Invoice amount is fixedRentalAmount, invoiced every paymentPeriodCount periods
 
 	Addresses []types.PaymentAddressInfo `json:"addresses"`
+
+	// Orchestration fee configuration (optional)
+	OrchestrationFee *OrchestrationFeeConfig `json:"orchestration_fee,omitempty"`
+}
+
+// OrchestrationFeeConfig represents the configuration for orchestration fees
+type OrchestrationFeeConfig struct {
+	// Fixed fee amount (e.g., "1.50" for $1.50)
+	// If empty or "0", no fixed fee is charged
+	FixedAmount string `json:"fixed_amount,omitempty"`
+
+	// Percentage fee (e.g., "2.5" for 2.5%)
+	// If empty or "0", no percentage fee is charged
+	// Percentage is applied to the total amount of all payment items in the batch
+	Percentage string `json:"percentage,omitempty"`
+
+	// Recipient address for orchestration fee payments
+	// If empty, uses the contract's default addresses
+	// The transaction is still forwarded to the original requestor, but uses this address for payment details
+	RecipientAddress types.PaymentAddressInfo `json:"recipient_address,omitempty"`
+}
+
+// ValidateOrchestrationFee validates the orchestration fee configuration
+func (pd *PaymentDetails) ValidateOrchestrationFee() error {
+	if pd.OrchestrationFee == nil {
+		return nil // Optional field
+	}
+
+	fee := pd.OrchestrationFee
+
+	// At least one component must be specified
+	if (fee.FixedAmount == "" || fee.FixedAmount == "0") &&
+		(fee.Percentage == "" || fee.Percentage == "0") {
+		return fmt.Errorf("orchestration_fee must have at least fixed_amount or percentage")
+	}
+
+	// Validate fixed amount if provided
+	if fee.FixedAmount != "" && fee.FixedAmount != "0" {
+		if _, err := strconv.ParseFloat(fee.FixedAmount, 64); err != nil {
+			return fmt.Errorf("invalid orchestration_fee.fixed_amount: %w", err)
+		}
+	}
+
+	// Validate percentage if provided
+	if fee.Percentage != "" && fee.Percentage != "0" {
+		pct, err := strconv.ParseFloat(fee.Percentage, 64)
+		if err != nil {
+			return fmt.Errorf("invalid orchestration_fee.percentage: %w", err)
+		}
+		if pct < 0 || pct > 100 {
+			return fmt.Errorf("orchestration_fee.percentage must be between 0 and 100")
+		}
+	}
+
+	return nil
 }

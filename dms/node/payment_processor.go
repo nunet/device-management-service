@@ -18,6 +18,7 @@ import (
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 // PaymentProcessor defines the interface for processing payment items.
@@ -125,6 +126,64 @@ func (pp *paymentProcessorImpl) ProcessPaymentItems(
 			log.Errorf("failed to forward transaction for item %s: %v", item.UniqueID, err)
 			// Continue - payment is saved
 		}
+	}
+
+	// Calculate and process orchestration fee for the entire batch
+	if contract.PaymentDetails.OrchestrationFee == nil {
+		return nil // No orchestration fee configured
+	}
+
+	feeCalculator := contracts.NewOrchestrationFeeCalculator()
+
+	// Calculate fee based on all payment items
+	feeAmount, err := feeCalculator.CalculateFee(items, contract.PaymentDetails.OrchestrationFee)
+	if err != nil {
+		log.Errorf("failed to calculate orchestration fee: %v", err)
+		return nil // Don't fail - primary transactions already processed
+	}
+
+	if feeAmount == "" {
+		return nil // No fee to generate
+	}
+
+	// Generate orchestration fee item
+	feeItem, err := feeCalculator.GenerateOrchestrationFeeItem(
+		items,
+		contract,
+		items[0].UniqueID,
+		feeAmount,
+	)
+	if err != nil {
+		log.Errorf("failed to generate orchestration fee item: %v", err)
+		return nil // Don't fail - primary transactions already processed
+	}
+
+	if feeItem == nil {
+		return nil // No fee item generated
+	}
+
+	// Process orchestration fee item using existing methods
+	// Save payment (reuses existing savePayment method)
+	if err := pp.savePayment(contract, feeItem); err != nil {
+		log.Errorf("failed to save orchestration fee payment: %v", err)
+		return nil // Don't fail - primary transactions already processed
+	}
+
+	// Forward transaction - create temporary contract copy with modified addresses if needed
+	tempContract := *contract
+
+	// Use orchestration fee recipient address if specified, otherwise use contract addresses
+	if contract.PaymentDetails.OrchestrationFee.RecipientAddress.RequesterAddr != "" {
+		tempContract.PaymentDetails.Addresses = []types.PaymentAddressInfo{
+			contract.PaymentDetails.OrchestrationFee.RecipientAddress,
+		}
+	}
+
+	// Forward transaction using existing forwardTransaction method
+	// This forwards to the original requestor (same as primary transactions)
+	if err := pp.forwardTransaction(&tempContract, feeItem); err != nil {
+		log.Errorf("failed to forward orchestration fee transaction: %v", err)
+		// Continue - payment is saved
 	}
 
 	return nil
