@@ -53,6 +53,7 @@ import (
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
+	payment_quote "gitlab.com/nunet/device-management-service/tokenomics/store/payment_quote"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/types"
@@ -293,6 +294,11 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		return nil, fmt.Errorf("failed to create transaction store: %w", err)
 	}
 
+	paymentQuoteStore, err := payment_quote.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create payment quote store: %w", err)
+	}
+
 	factories := provider.NewProviderFactoryRegistry(capCtx.DID().URI)
 	// add local incus to the factory
 	local.RegisterFactory(factories)
@@ -323,6 +329,7 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		deploymentStore,
 		provRegistry,
 		provisionedResourceStore,
+		paymentQuoteStore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -501,6 +508,7 @@ func NewDMSDB(path string) (*clover.DB, error) {
 			"service_provider_transactions",
 			"contracts_usage",
 			"usage_metadata",
+			"payment_quotes",
 		},
 	)
 }

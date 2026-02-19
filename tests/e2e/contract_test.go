@@ -73,6 +73,7 @@ func DeployWithContractTest(suite *TestSuite) {
 			"feesPerAllocation":   feesPerAllocation,
 			"paymentModel":        string(contracts.PayPerAllocation),
 			"resourceTimeUnit":    "minute",
+			"paymentPeriod":       "minute",
 			"paymentPeriodCount":  "1",
 			"startDate":           startDate,
 			"endDate":             endDate,
@@ -413,6 +414,7 @@ func DeployWithContractCollectAfterPayTest(suite *TestSuite) {
 			"feesPerAllocation":   feesPerAllocation,
 			"paymentModel":        string(contracts.PayPerAllocation),
 			"resourceTimeUnit":    "minute",
+			"paymentPeriod":       "minute",
 			"paymentPeriodCount":  "1",
 			"startDate":           startDate,
 			"endDate":             endDate,
@@ -666,6 +668,7 @@ func DeployWithContractPayPerDeploymentTest(suite *TestSuite) {
 			"paymentModel":        string(contracts.PayPerDeployment),
 			"feePerDeployment":    feePerDeployment,
 			"resourceTimeUnit":    "minute",
+			"paymentPeriod":       "minute",
 			"paymentPeriodCount":  "2",
 			"startDate":           startDate,
 			"endDate":             endDate,
@@ -978,6 +981,7 @@ func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
 			"feePerTimeUnit":      feePerTimeUnit,
 			"timeUnit":            timeUnit,
 			"resourceTimeUnit":    "minute",
+			"paymentPeriod":       "minute",
 			"paymentPeriodCount":  "5",
 			"startDate":           startDate,
 			"endDate":             endDate,
@@ -2013,6 +2017,25 @@ func DeployWithContractsEnforcedProvidersTest(suite *TestSuite) {
 	})
 }
 
+// Helper functions for contract JSON manipulation
+func readContractJSON(filePath string) (map[string]interface{}, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	var contract map[string]interface{}
+	err = json.Unmarshal(data, &contract)
+	return contract, err
+}
+
+func writeContractJSON(filePath string, contract map[string]interface{}) error {
+	data, err := json.MarshalIndent(contract, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, data, 0o644)
+}
+
 // DeployWithContractOrchestrationFeeTest runs the tests that deploy with contracts and orchestration fees
 func DeployWithContractOrchestrationFeeTest(suite *TestSuite) {
 	suite.Run("dms with contracts and orchestration fees", func() {
@@ -2058,6 +2081,7 @@ func DeployWithContractOrchestrationFeeTest(suite *TestSuite) {
 			"feesPerAllocation":             feesPerAllocation,
 			"paymentModel":                  string(contracts.PayPerAllocation),
 			"resourceTimeUnit":              "minute",
+			"paymentPeriod":                 "minute",
 			"paymentPeriodCount":            "1",
 			"startDate":                     startDate,
 			"endDate":                       endDate,
@@ -2291,6 +2315,22 @@ func extractValidationResponse(input string) (string, error) {
 		return "", fmt.Errorf("valid not found in the input string")
 	}
 	return match[1], nil
+}
+
+func extractQuoteResponse(input string) (*contracts.ContractGetPaymentQuoteResponse, error) {
+	var response contracts.ContractGetPaymentQuoteResponse
+	if err := json.Unmarshal([]byte(input), &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal quote response: %w", err)
+	}
+	return &response, nil
+}
+
+func extractValidateQuoteResponse(input string) (*contracts.ContractValidatePaymentQuoteResponse, error) {
+	var response contracts.ContractValidatePaymentQuoteResponse
+	if err := json.Unmarshal([]byte(input), &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal validate quote response: %w", err)
+	}
+	return &response, nil
 }
 
 func replacePlaceholders(filePath string, args map[string]string) error {
@@ -3481,6 +3521,7 @@ func DeployWithContractChainTest(suite *TestSuite) {
 			"feesPerAllocation":   "10",
 			"paymentModel":        string(contracts.PayPerAllocation),
 			"resourceTimeUnit":    "minute",
+			"paymentPeriod":       "minute",
 			"paymentPeriodCount":  "1",
 			"startDate":           startDate,
 			"endDate":             endDate,
@@ -3515,6 +3556,7 @@ func DeployWithContractChainTest(suite *TestSuite) {
 			"feesPerAllocation":   "10",
 			"paymentModel":        string(contracts.PayPerAllocation),
 			"resourceTimeUnit":    "minute",
+			"paymentPeriod":       "minute",
 			"paymentPeriodCount":  "1",
 			"startDate":           startDate,
 			"endDate":             endDate,
@@ -3544,6 +3586,7 @@ func DeployWithContractChainTest(suite *TestSuite) {
 			"feesPerAllocation":   "10",
 			"paymentModel":        string(contracts.PayPerAllocation),
 			"resourceTimeUnit":    "minute",
+			"paymentPeriod":       "minute",
 			"paymentPeriodCount":  "1",
 			"startDate":           startDate,
 			"endDate":             endDate,
@@ -4007,5 +4050,304 @@ func DeployWithContractChainTest(suite *TestSuite) {
 			}
 			suite.T().Logf("Tail Contract B2 transaction metadata: %+v", tailB2Tx.Metadata)
 		}
+	})
+}
+
+// DeployWithContractUSDTQuoteTest runs tests identical to DeployWithContractTest
+// but with pricing_currency set to "USDT" and tests the quote creation, validation, cancellation, and payment flow
+func DeployWithContractUSDTQuoteTest(suite *TestSuite) {
+	suite.Run("dms with contracts USDT quote flow", func() {
+		requester := suite.nodes[0]
+		contractHost := suite.nodes[1]
+		provider := suite.nodes[2]
+		paymentValidator := suite.nodes[3]
+
+		// Configure nodes with CoinMarketCap sandbox API
+		// Configuration is set in setupTestNetwork() based on test name
+		// Sandbox API endpoint: https://sandbox-api.coinmarketcap.com/v1
+		// Sandbox API key: b54bcf4d-1bca-4e8e-9a24-22ff2c3f462c (public test key)
+
+		// offboard this machine to not accept any bid request
+		contractHost.client.offboard(suite.T(), contractHost.userContext, contractHost.password)
+		paymentValidator.client.offboard(suite.T(), paymentValidator.userContext, paymentValidator.password)
+
+		srcFile := filepath.Join(suite.testDataDir, "contracts", "sample.json.sample")
+		destinationFile := filepath.Join(requester.config.WorkDir, "sample.json")
+		err := copyFile(srcFile, destinationFile)
+		suite.Require().NoError(err)
+
+		// random addresses
+		requesterEthAddr := "0xe66b31678d6c16e9ebf358268a790b763c133750"
+		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
+
+		// Set fee in USDT (will be converted to NTX via quote)
+		feesPerAllocation := "10.00" // 10 USDT
+
+		// rpc on port (use different port to avoid conflicts with other tests)
+		go startMockRPC(9428)
+		suite.Require().Eventually(func() bool {
+			url := "http://localhost:9428/healthz"
+			return checkHealth(url)
+		}, 10*time.Second, 500*time.Millisecond, "healthcheck endpoint did not become healthy in time")
+
+		startDate := time.Now().Format(time.RFC3339)
+		endDate := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+		err = replacePlaceholders(destinationFile, map[string]string{
+			"seDID":               contractHost.dmsDID,
+			"providerDID":         provider.dmsDID,
+			"requesterDID":        requester.dmsDID,
+			"paymentValidatorDID": paymentValidator.dmsDID,
+			"requesterAddr":       requesterEthAddr,
+			"providerAddr":        providerEthAddr,
+			"feesPerAllocation":   feesPerAllocation,
+			"paymentModel":        string(contracts.PayPerAllocation),
+			"resourceTimeUnit":    "minute",
+			"paymentPeriod":       "minute",
+			"paymentPeriodCount":  "1",
+			"startDate":           startDate,
+			"endDate":             endDate,
+			"disableBilling":      "false",
+			"metadata":            "",
+		})
+		suite.Require().NoError(err)
+
+		// Add pricing_currency to contract JSON
+		contractJSON, err := readContractJSON(destinationFile)
+		suite.Require().NoError(err)
+		contractJSON["payment_details"].(map[string]interface{})["pricing_currency"] = "USDT"
+		err = writeContractJSON(destinationFile, contractJSON)
+		suite.Require().NoError(err)
+
+		cmdOut, err := requester.client.createContract(suite.T(), destinationFile, requester.dmsContext, requester.password)
+		fmt.Println(cmdOut, err)
+
+		// sleep until actor starts
+		time.Sleep(5 * time.Second)
+
+		contractDID, err := getContractID(cmdOut)
+		suite.Require().NoError(err)
+
+		// Contract validation
+		cmdOut, err = provider.client.validateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		validResult, err := extractValidationResponse(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("false", validResult)
+
+		// Deployment setup
+		srcFileEnsemble := filepath.Join(suite.testDataDir, "ensembles", "hello-contract.yaml")
+		destinationFileEnsemble := filepath.Join(requester.config.WorkDir, "hello-contract.yaml")
+		err = copyFile(srcFileEnsemble, destinationFileEnsemble)
+		suite.Require().NoError(err)
+		contractsContent := `contracts:
+  contract1:
+    did: "` + contractDID + `"
+    host: "` + contractHost.dmsDID + `"
+    payment_details:
+        payment_model: "` + string(contracts.PayPerAllocation) + `"
+        fee_per_allocation: "` + feesPerAllocation + `"
+        pricing_currency: "USDT"`
+		err = replaceContractInFile(destinationFileEnsemble, contractsContent)
+		suite.Require().NoError(err)
+
+		// Deploy and approve
+		deploymentResult := requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"), "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID := extractEnsembleID(deploymentResult)
+
+		// deployment should not go through, lets check after 10 seconds
+		time.Sleep(10 * time.Second)
+		status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+		suite.Require().NoError(err)
+		suite.Require().Equal(jobtypes.DeploymentStatusPreparing.String(), extractStatus(status))
+
+		// Approve contract
+		cmdOut, err = provider.client.listIncomingContracts(suite.T(), provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+		cmdOut, err = provider.client.approveContracts(suite.T(), contractDID, provider.dmsContext, provider.password)
+		fmt.Println(cmdOut, err)
+
+		time.Sleep(7 * time.Second)
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		contractState, err := extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("ACCEPTED", contractState)
+
+		// wait 6 seconds for payment to be validated
+		time.Sleep(time.Second * 6)
+
+		// Redeploy after approval
+		deploymentResult = requester.client.deploy(
+			suite.T(), requester.userContext, requester.password,
+			filepath.Join(requester.config.WorkDir, "hello-contract.yaml"), "2m")
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		manifestID = extractEnsembleID(deploymentResult)
+
+		// Wait until the deployment status is "Running"
+		suite.Require().Eventually(func() bool {
+			status, err := requester.client.deploymentStatus(suite.T(), requester.userContext, requester.password, manifestID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			suite.T().Log("Deployment status:", extractStatus(status))
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment with contract did not reach Running status")
+
+		time.Sleep(10 * time.Second)
+
+		// contract host generates usages and sends them to payment provider
+		calculateResp, err := contractHost.client.calculateContractUsages(suite.T(), contractHost.dmsContext, contractHost.password, contractDID)
+		suite.Require().NoError(err)
+
+		var usageResponse contracts.CollectUsagesAndForwardToPaymentProvidersReponse
+		err = json.Unmarshal([]byte(calculateResp), &usageResponse)
+		suite.Require().NoError(err, "failed to unmarshal usage calculation response")
+		suite.Require().Empty(usageResponse.Error, "usage calculation should not have errors")
+
+		time.Sleep(10 * time.Second)
+
+		// check if transactions arrived on service provider to be paid
+		output, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
+		suite.Require().NoError(err)
+
+		uniqueID, status, err := extractTransactionDataRegex(output)
+		suite.Require().NoError(err)
+		suite.Require().NotEmpty(uniqueID)
+		suite.Require().Equal("unpaid", status)
+
+		// TEST 1: Get Payment Quote
+		suite.T().Log("Testing payment quote creation")
+		quoteOutput, err := requester.client.getPaymentQuote(suite.T(), requester.dmsContext, requester.password, uniqueID)
+		suite.Require().NoError(err)
+
+		quoteResp, err := extractQuoteResponse(quoteOutput)
+		suite.Require().NoError(err)
+		suite.Require().Empty(quoteResp.Error, "quote creation should not have errors")
+		suite.Require().NotEmpty(quoteResp.QuoteID, "quote should have quote_id")
+		suite.Require().NotEmpty(quoteResp.ConvertedAmount, "quote should have converted_amount")
+		suite.Require().Equal("USDT", quoteResp.PricingCurrency, "pricing currency should be USDT")
+		suite.Require().Equal("NTX", quoteResp.PaymentCurrency, "payment currency should be NTX")
+		suite.Require().NotEmpty(quoteResp.ExchangeRate, "quote should have exchange_rate")
+		suite.T().Logf("Quote created: QuoteID=%s, OriginalAmount=%s, ConvertedAmount=%s, ExchangeRate=%s",
+			quoteResp.QuoteID, quoteResp.OriginalAmount, quoteResp.ConvertedAmount, quoteResp.ExchangeRate)
+
+		quoteID := quoteResp.QuoteID
+
+		// TEST 2: Attempt to create duplicate quote (should fail)
+		suite.T().Log("Testing duplicate quote prevention")
+		quoteOutputDuplicate, err := requester.client.getPaymentQuote(suite.T(), requester.dmsContext, requester.password, uniqueID)
+		suite.Require().NoError(err) // Command succeeds, but response should have error
+
+		quoteRespDuplicate, err := extractQuoteResponse(quoteOutputDuplicate)
+		suite.Require().NoError(err)
+		suite.Require().NotEmpty(quoteRespDuplicate.Error, "should return error when trying to create duplicate quote")
+		suite.Require().Contains(quoteRespDuplicate.Error, "active quote already exists", "error should indicate active quote exists")
+		suite.Require().Contains(quoteRespDuplicate.Error, quoteID, "error should mention existing quote_id")
+		suite.T().Logf("Duplicate quote creation correctly rejected: %s", quoteRespDuplicate.Error)
+
+		// TEST 3: Validate Quote
+		suite.T().Log("Testing quote validation")
+		validateOutput, err := requester.client.validatePaymentQuote(suite.T(), requester.dmsContext, requester.password, quoteID)
+		suite.Require().NoError(err)
+
+		validateResp, err := extractValidateQuoteResponse(validateOutput)
+		suite.Require().NoError(err)
+		suite.Require().True(validateResp.Valid, "quote should be valid")
+		suite.Require().Empty(validateResp.Error, "quote validation should not have errors")
+		suite.Require().Equal(quoteID, validateResp.QuoteID, "quote_id should match")
+		suite.T().Logf("Quote validated successfully: QuoteID=%s", quoteID)
+
+		// TEST 4: Test quote cancellation flow
+		suite.T().Log("Testing quote cancellation")
+		// Cancel the existing quote
+		cancelOutput, err := requester.client.cancelPaymentQuote(suite.T(), requester.dmsContext, requester.password, quoteID)
+		suite.Require().NoError(err)
+
+		var cancelResp contracts.ContractCancelPaymentQuoteResponse
+		err = json.Unmarshal([]byte(cancelOutput), &cancelResp)
+		suite.Require().NoError(err)
+		suite.Require().Empty(cancelResp.Error, "quote cancellation should not have errors")
+		suite.T().Logf("Quote cancelled successfully: QuoteID=%s", quoteID)
+
+		// Verify cancelled quote cannot be validated
+		validateOutput2, err := requester.client.validatePaymentQuote(suite.T(), requester.dmsContext, requester.password, quoteID)
+		suite.Require().NoError(err)
+		validateResp2, err := extractValidateQuoteResponse(validateOutput2)
+		suite.Require().NoError(err)
+		suite.Require().False(validateResp2.Valid, "cancelled quote should be invalid")
+		suite.Require().Contains(validateResp2.Error, "quote already used", "error should indicate quote was used/cancelled")
+		suite.T().Logf("Cancelled quote validation result: Valid=%v, Error=%s", validateResp2.Valid, validateResp2.Error)
+
+		// TEST 5: Create new quote after cancellation (should succeed)
+		suite.T().Log("Testing new quote creation after cancellation")
+		quoteOutput2, err := requester.client.getPaymentQuote(suite.T(), requester.dmsContext, requester.password, uniqueID)
+		suite.Require().NoError(err)
+
+		quoteResp2, err := extractQuoteResponse(quoteOutput2)
+		suite.Require().NoError(err)
+		suite.Require().Empty(quoteResp2.Error, "should be able to create new quote after cancelling previous one")
+		suite.Require().NotEmpty(quoteResp2.QuoteID, "new quote should have quote_id")
+		suite.Require().NotEqual(quoteID, quoteResp2.QuoteID, "new quote should have different quote_id")
+		cancelQuoteID := quoteResp2.QuoteID
+		suite.T().Logf("New quote created after cancellation: QuoteID=%s", cancelQuoteID)
+
+		// Validate the new quote
+		validateOutput3, err := requester.client.validatePaymentQuote(suite.T(), requester.dmsContext, requester.password, cancelQuoteID)
+		suite.Require().NoError(err)
+		validateResp3, err := extractValidateQuoteResponse(validateOutput3)
+		suite.Require().NoError(err)
+		suite.Require().True(validateResp3.Valid, "new quote should be valid")
+		suite.T().Logf("New quote validated successfully: QuoteID=%s", cancelQuoteID)
+
+		// TEST 6: Attempt to reuse quote (should fail after payment)
+		// Simulate payment with the quote
+		txHash := "0x21ef8b84a75ec89097af6b53749b1af0fc21495060b0b57a6b117d6c69113e5f"
+		confirmOutput, err := requester.client.confirmLocalTransactionWithQuote(suite.T(), requester.dmsContext, requester.password, uniqueID, txHash, cancelQuoteID)
+		suite.Require().NoError(err)
+
+		var confirmResp contracts.ContractConfirmLocalTransactionResponse
+		err = json.Unmarshal([]byte(confirmOutput), &confirmResp)
+		suite.Require().NoError(err)
+		// Payment validation will fail because it's a mock transaction, but quote should be marked as used
+		suite.T().Logf("Payment confirmation response: %s", confirmResp.Error)
+
+		// TEST 7: Try to validate used quote (should fail)
+		suite.T().Log("Testing validation of used quote")
+		validateOutput4, err := requester.client.validatePaymentQuote(suite.T(), requester.dmsContext, requester.password, cancelQuoteID)
+		suite.Require().NoError(err)
+
+		validateResp4, err := extractValidateQuoteResponse(validateOutput4)
+		suite.Require().NoError(err)
+		// Quote should be invalid after use
+		suite.T().Logf("Used quote validation result: Valid=%v, Error=%s", validateResp4.Valid, validateResp4.Error)
+		suite.Require().False(validateResp4.Valid, "used quote should be invalid")
+		suite.Require().Contains(validateResp4.Error, "quote already used", "error should indicate quote was used")
+
+		// Contract settlement and termination
+		time.Sleep(3 * time.Second)
+		_, err = provider.client.settleContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		contractState, err = extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("SETTLED", contractState)
+
+		time.Sleep(3 * time.Second)
+		_, err = provider.client.terminateContract(suite.T(), provider.dmsContext, provider.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+
+		time.Sleep(3 * time.Second)
+		cmdOut, err = requester.client.contractStatus(suite.T(), requester.dmsContext, requester.password, contractDID, contractHost.dmsDID)
+		suite.Require().NoError(err)
+		contractState, err = extractContractState(cmdOut)
+		suite.Require().NoError(err)
+		suite.Require().Equal("TERMINATED", contractState)
 	})
 }

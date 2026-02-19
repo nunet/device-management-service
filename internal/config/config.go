@@ -17,6 +17,7 @@ type Config struct {
 	Job           `mapstructure:"job"           json:"job"`
 	Observability `mapstructure:"observability" json:"observability"`
 	APM           `mapstructure:"apm"           json:"apm"`
+	CoinMarketCap CoinMarketCapConfig `mapstructure:"coinmarketcap" json:"coinmarketcap"`
 }
 
 type General struct {
@@ -155,4 +156,13 @@ type OTel struct {
 	Endpoint string `mapstructure:"endpoint" json:"endpoint"`
 	// Insecure disables TLS for the gRPC connection
 	Insecure bool `mapstructure:"insecure" json:"insecure"`
+}
+
+// CoinMarketCap configuration for price oracle
+type CoinMarketCapConfig struct {
+	APIKey       string `mapstructure:"api_key" json:"api_key"`
+	BaseURL      string `mapstructure:"base_url" json:"base_url"`
+	EndpointPath string `mapstructure:"endpoint_path" json:"endpoint_path"`
+	CacheTTL     string `mapstructure:"cache_ttl" json:"cache_ttl"`
+	QuoteTTL     string `mapstructure:"quote_ttl" json:"quote_ttl"` // Time-to-live for payment quotes
 }

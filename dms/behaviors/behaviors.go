@@ -134,6 +134,11 @@ const (
 	ContractListLocalTransactionsBehavior   = TokenomicNamespace + "/contract/transactions/list"
 	ContractConfirmLocalTransactionBehavior = TokenomicNamespace + "/contract/transactions/confirm"
 
+	// Payment quote behaviors
+	ContractGetPaymentQuoteBehavior      = TokenomicNamespace + "/contract/payment/quote/get"
+	ContractValidatePaymentQuoteBehavior = TokenomicNamespace + "/contract/payment/quote/validate"
+	ContractCancelPaymentQuoteBehavior   = TokenomicNamespace + "/contract/payment/quote/cancel"
+
 	PromiseBidToBidBehavior   = "/dms/deployment/promisebid"
 	PromiseBidSigningBehavior = "/dms/deployment/promisebid/sign"
 

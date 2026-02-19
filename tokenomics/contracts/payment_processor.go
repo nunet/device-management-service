@@ -23,12 +23,18 @@ type UsageData struct {
 
 // PaymentItem represents a single payment to process
 type PaymentItem struct {
-	UniqueID           string
-	DeploymentID       string // Empty for non-deployment models
-	Amount             string
-	Usages             int
-	Metadata           map[string]interface{} // Model-specific metadata
-	IsOrchestrationFee bool                   `json:"is_orchestration_fee,omitempty"` // Indicates if this is an orchestration fee transaction
+	UniqueID     string
+	DeploymentID string // Empty for non-deployment models
+	Amount       string // Final amount in payment currency (NTX after conversion)
+	Usages       int
+	Metadata     map[string]interface{} // Model-specific metadata
+
+	// Fields for price conversion tracking (optional)
+	OriginalAmount      string    `json:"original_amount,omitempty"`      // Amount in pricing currency (USDT)
+	PricingCurrency     string    `json:"pricing_currency,omitempty"`     // Currency of original amount
+	ExchangeRate        string    `json:"exchange_rate,omitempty"`        // Rate used for conversion
+	ConversionTimestamp time.Time `json:"conversion_timestamp,omitempty"` // When conversion occurred
+	IsOrchestrationFee  bool      `json:"is_orchestration_fee,omitempty"` // Indicates if this is an orchestration fee transaction
 }
 
 // PaymentModelProcessor defines the clear, shared interface for all payment model processors.

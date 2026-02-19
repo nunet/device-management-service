@@ -9,6 +9,7 @@
 package node
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -29,6 +30,7 @@ import (
 	ethereumClient "gitlab.com/nunet/device-management-service/tokenomics/client/ethereum"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
+	payment_quote "gitlab.com/nunet/device-management-service/tokenomics/store/payment_quote"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -793,6 +795,33 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 		handleErr(fmt.Errorf("failed to find payment with unique id: %s", req.UniqueID))
 		return
 	}
+
+	// Check if there's a quote for this transaction
+	var expectedAmount string
+	if req.QuoteID != "" {
+		// If quote_id is provided, get quote by ID
+		quote, err := n.paymentQuoteStore.GetQuote(req.QuoteID)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to get quote: %w", err))
+			return
+		}
+		if quote.Used {
+			expectedAmount = quote.ConvertedAmount
+		} else {
+			// Fallback to payment amount if quote not found or not used
+			expectedAmount = payment.Amount
+		}
+	} else {
+		// Try to find used quote by unique_id
+		quote, err := n.paymentQuoteStore.GetQuoteByUniqueID(req.UniqueID)
+		if quote != nil && quote.Used {
+			expectedAmount = quote.ConvertedAmount
+		} else if err != nil { // meaning no quote was used
+			// Fallback to payment amount (for backward compatibility)
+			expectedAmount = payment.Amount
+		}
+	}
+
 	verified := false
 	errorMsg := ""
 	contractID = payment.Contract.ContractDID
@@ -847,14 +876,14 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 					return
 				}
 
-				ok, err := compareDecimals(tx.Amount, payment.Amount)
+				ok, err := compareDecimals(tx.Amount, expectedAmount)
 				if err != nil {
-					errorMsg = err.Error() + " tx amount: " + tx.Amount + " payment amount: " + payment.Amount
+					errorMsg = err.Error() + " tx amount: " + tx.Amount + " expected amount: " + expectedAmount
 				}
 				if ok {
 					verified = true
 				} else {
-					errorMsg = "not verified: tx amount: " + tx.Amount + " payment amount: " + payment.Amount
+					errorMsg = "not verified: tx amount: " + tx.Amount + " expected amount: " + expectedAmount
 				}
 
 				break
@@ -902,14 +931,14 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 					return
 				}
 
-				ok, err := compareDecimals(tx.Quantity, payment.Amount)
+				ok, err := compareDecimals(tx.Quantity, expectedAmount)
 				if err != nil {
-					errorMsg = err.Error() + " tx amount: " + tx.Quantity + " payment amount: " + payment.Amount
+					errorMsg = err.Error() + " tx amount: " + tx.Quantity + " expected amount: " + expectedAmount
 				}
 				if ok {
 					verified = true
 				} else {
-					errorMsg = "not verified: tx amount: " + tx.Quantity + " payment amount: " + payment.Amount
+					errorMsg = "not verified: tx amount: " + tx.Quantity + " expected amount: " + expectedAmount
 				}
 
 				break
@@ -963,10 +992,32 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 	}
 	contractID = paymentProviderDID
 
+	// If quote_id is provided, validate and mark as used
+	if req.QuoteID != "" {
+		// Validate quote is still valid (not expired, not used)
+		quote, err := n.paymentQuoteStore.ValidateQuote(req.QuoteID)
+		if err != nil {
+			handleErr(fmt.Errorf("quote validation failed: %w", err))
+			return
+		}
+
+		if quote.UniqueID != req.UniqueID {
+			handleErr(fmt.Errorf("quote does not match transaction"))
+			return
+		}
+
+		// Mark quote as used
+		if err := n.paymentQuoteStore.MarkQuoteAsUsed(req.QuoteID); err != nil {
+			handleErr(fmt.Errorf("failed to mark quote as used: %w", err))
+			return
+		}
+	}
+
 	paymentValidationReq := contracts.ContractPaymentValidationRequest{
 		TxHash:     req.TxHash,
 		UniqueID:   req.UniqueID,
 		Blockchain: req.Blockchain,
+		QuoteID:    req.QuoteID,
 	}
 	paymentProvider, err := actor.HandleFromDID(paymentProviderDID)
 	if err != nil {
@@ -1125,6 +1176,11 @@ func (n *Node) handleIncomingTransaction(msg actor.Envelope) {
 		Status:              req.Status, // Use provided status, or "" defaults to "unpaid" in Upsert
 		TxHash:              req.TxHash, // Use provided tx hash
 		Metadata:            req.Metadata,
+
+		// Store conversion metadata if provided
+		OriginalAmount:     req.OriginalAmount,     // Amount in pricing currency (USDT)
+		PricingCurrency:    req.PricingCurrency,    // Currency of original amount
+		RequiresConversion: req.RequiresConversion, // True if conversion is needed
 	})
 	if err != nil {
 		handleErr(fmt.Errorf("failed to insert transaction into the store: %w", err))
@@ -1396,4 +1452,197 @@ func compareDecimals(a, b string) (bool, error) {
 		return false, err
 	}
 	return af.Cmp(bf) >= 0, nil
+}
+
+// handleGetPaymentQuote handles requests for payment quotes
+func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorw("handle_get_payment_quote",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err)
+		n.sendReply(msg, contracts.ContractGetPaymentQuoteResponse{Error: err.Error()})
+	}
+
+	var req contracts.ContractGetPaymentQuoteRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		handleErr(fmt.Errorf("failed to unmarshal payment quote request: %w", err))
+		return
+	}
+
+	// Get transaction
+	tx, err := n.transactionStore.GetTransactionByUniqueID(req.UniqueID)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get transaction: %w", err))
+		return
+	}
+
+	// Check if conversion is needed
+	if !tx.RequiresConversion || tx.PricingCurrency == "" {
+		handleErr(fmt.Errorf("transaction does not require conversion"))
+		return
+	}
+
+	// Check if there's already an active quote for this transaction
+	existingQuote, err := n.paymentQuoteStore.HasActiveQuote(req.UniqueID)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to check for existing quote: %w", err))
+		return
+	}
+	if existingQuote != nil {
+		handleErr(fmt.Errorf("active quote already exists for this transaction (quote_id: %s). Please cancel the existing quote before creating a new one", existingQuote.QuoteID))
+		return
+	}
+
+	// Get payment currency from transaction addresses
+	paymentCurrency := "NTX"
+	if len(tx.ToAddress) > 0 {
+		paymentCurrency = tx.ToAddress[0].Currency
+	}
+
+	// Perform real-time conversion
+	if n.priceConverter == nil {
+		handleErr(fmt.Errorf("price converter not configured"))
+		return
+	}
+
+	ctx := context.Background()
+	oracle := n.priceConverter.GetOracle()
+	if oracle == nil {
+		handleErr(fmt.Errorf("price oracle not available"))
+		return
+	}
+
+	convertedAmount, err := oracle.ConvertAmount(ctx, tx.OriginalAmount, tx.PricingCurrency, paymentCurrency)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to convert amount: %w", err))
+		return
+	}
+
+	// Get exchange rate
+	rate, err := oracle.GetPrice(ctx, tx.PricingCurrency, paymentCurrency)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get exchange rate: %w", err))
+		return
+	}
+
+	// Generate quote ID
+	quoteID := fmt.Sprintf("quote_%s_%d", req.UniqueID, time.Now().UnixNano())
+
+	// Get quote TTL from config (default: 2 minutes)
+	quoteTTL := 2 * time.Minute
+	if n.dmsConfig.CoinMarketCap.QuoteTTL != "" {
+		if parsedTTL, err := time.ParseDuration(n.dmsConfig.CoinMarketCap.QuoteTTL); err == nil {
+			quoteTTL = parsedTTL
+		}
+	}
+
+	// Create quote
+	quote := payment_quote.PaymentQuote{
+		QuoteID:         quoteID,
+		UniqueID:        req.UniqueID,
+		OriginalAmount:  tx.OriginalAmount,
+		ConvertedAmount: convertedAmount,
+		PricingCurrency: tx.PricingCurrency,
+		PaymentCurrency: paymentCurrency,
+		ExchangeRate:    fmt.Sprintf("%.8f", rate),
+		CreatedAt:       time.Now(),
+		ExpiresAt:       time.Now().Add(quoteTTL),
+		Used:            false,
+	}
+
+	// Store quote
+	if err := n.paymentQuoteStore.CreateQuote(quote); err != nil {
+		handleErr(fmt.Errorf("failed to create quote: %w", err))
+		return
+	}
+
+	// Return response
+	resp := contracts.ContractGetPaymentQuoteResponse{
+		QuoteID:         quoteID,
+		OriginalAmount:  tx.OriginalAmount,
+		ConvertedAmount: convertedAmount,
+		PricingCurrency: tx.PricingCurrency,
+		PaymentCurrency: paymentCurrency,
+		ExchangeRate:    fmt.Sprintf("%.8f", rate),
+		ExpiresAt:       quote.ExpiresAt,
+	}
+
+	n.sendReply(msg, resp)
+}
+
+// handleValidatePaymentQuote handles validation requests for payment quotes
+func (n *Node) handleValidatePaymentQuote(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		n.sendReply(msg, contracts.ContractValidatePaymentQuoteResponse{
+			Valid: false,
+			Error: err.Error(),
+		})
+	}
+
+	var req contracts.ContractValidatePaymentQuoteRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		handleErr(fmt.Errorf("failed to unmarshal validate quote request: %w", err))
+		return
+	}
+
+	// Validate quote (checks expiration and usage)
+	quote, err := n.paymentQuoteStore.ValidateQuote(req.QuoteID)
+	if err != nil {
+		handleErr(fmt.Errorf("quote validation failed: %w", err))
+		return
+	}
+
+	// Return validation result with quote details
+	resp := contracts.ContractValidatePaymentQuoteResponse{
+		Valid:           true,
+		QuoteID:         quote.QuoteID,
+		OriginalAmount:  quote.OriginalAmount,
+		ConvertedAmount: quote.ConvertedAmount,
+		PricingCurrency: quote.PricingCurrency,
+		PaymentCurrency: quote.PaymentCurrency,
+		ExchangeRate:    quote.ExchangeRate,
+		ExpiresAt:       quote.ExpiresAt,
+	}
+
+	n.sendReply(msg, resp)
+}
+
+// handleCancelPaymentQuote handles cancellation requests for payment quotes
+func (n *Node) handleCancelPaymentQuote(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		n.sendReply(msg, contracts.ContractCancelPaymentQuoteResponse{Error: err.Error()})
+	}
+
+	var req contracts.ContractCancelPaymentQuoteRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		handleErr(fmt.Errorf("failed to unmarshal cancel quote request: %w", err))
+		return
+	}
+
+	// Validate quote exists
+	quote, err := n.paymentQuoteStore.GetQuote(req.QuoteID)
+	if err != nil {
+		handleErr(fmt.Errorf("quote not found: %w", err))
+		return
+	}
+
+	// Check if already used
+	if quote.Used {
+		handleErr(fmt.Errorf("quote already used"))
+		return
+	}
+
+	// Invalidate quote (mark as used)
+	if err := n.paymentQuoteStore.InvalidateQuote(req.QuoteID); err != nil {
+		handleErr(fmt.Errorf("failed to invalidate quote: %w", err))
+		return
+	}
+
+	n.sendReply(msg, contracts.ContractCancelPaymentQuoteResponse{})
 }

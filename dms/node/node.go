@@ -49,8 +49,10 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts/processors"
 	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
+	"gitlab.com/nunet/device-management-service/tokenomics/pricing"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
+	payment_quote "gitlab.com/nunet/device-management-service/tokenomics/store/payment_quote"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/types"
@@ -165,6 +167,10 @@ type Node struct {
 	// payment processor
 	paymentProcessor PaymentProcessor
 	gatewayStore     *gatewastore.Store
+
+	// payment quote store and price converter
+	paymentQuoteStore *payment_quote.Store
+	priceConverter    *pricing.PriceConverter
 }
 
 // createActor creates an actor.
@@ -209,6 +215,7 @@ func New(cfg config.Config, fs afero.Afero,
 	deploymentStore orchestrator.DeploymentStore,
 	providerRegistry *provider.Registry,
 	gatewayStore *gatewastore.Store,
+	paymentQuoteStore *payment_quote.Store,
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -340,7 +347,34 @@ func New(cfg config.Config, fs afero.Afero,
 		}
 	}
 
+	// Initialize price oracle and converter
+	var priceConverter *pricing.PriceConverter
+	if cfg.CoinMarketCap.APIKey != "" {
+		// Parse cache TTL (default to 5m if empty/invalid)
+		cacheTTL := 5 * time.Minute
+		if cfg.CoinMarketCap.CacheTTL != "" {
+			if parsedTTL, err := time.ParseDuration(cfg.CoinMarketCap.CacheTTL); err == nil {
+				cacheTTL = parsedTTL
+			}
+		}
+
+		// Set defaults for baseURL and endpointPath if empty
+		baseURL := cfg.CoinMarketCap.BaseURL
+		if baseURL == "" {
+			baseURL = "https://pro-api.coinmarketcap.com/v1"
+		}
+		endpointPath := cfg.CoinMarketCap.EndpointPath
+		if endpointPath == "" {
+			endpointPath = "/tools/price-conversion"
+		}
+
+		oracle := pricing.NewCoinMarketCapOracle(cfg.CoinMarketCap.APIKey, baseURL, endpointPath, cacheTTL)
+		priceConverter = pricing.NewPriceConverter(oracle)
+	}
+
 	n.paymentProcessor = NewPaymentProcessor(paymentStore, net, nodeActor.Handle(), invokeBehaviourFunc)
+	n.paymentQuoteStore = paymentQuoteStore
+	n.priceConverter = priceConverter
 
 	// set up the flight recorder
 	observability.FlightrecInit()
@@ -702,6 +736,15 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		},
 		behaviors.ContractConfirmLocalTransactionBehavior: {
 			fn: n.handleConfirmLocalTransaction,
+		},
+		behaviors.ContractGetPaymentQuoteBehavior: {
+			fn: n.handleGetPaymentQuote,
+		},
+		behaviors.ContractValidatePaymentQuoteBehavior: {
+			fn: n.handleValidatePaymentQuote,
+		},
+		behaviors.ContractCancelPaymentQuoteBehavior: {
+			fn: n.handleCancelPaymentQuote,
 		},
 
 		// gateway
