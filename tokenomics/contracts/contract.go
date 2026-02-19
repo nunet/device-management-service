@@ -146,6 +146,7 @@ type ContractConfirmLocalTransactionRequest struct {
 	UniqueID   string `json:"unique_id"`
 	TxHash     string `json:"tx_hash"`
 	Blockchain string `json:"blockchain"`
+	QuoteID    string `json:"quote_id,omitempty"` // Optional: quote ID for price conversion
 }
 
 type ContractConfirmLocalTransactionResponse struct {
@@ -157,10 +158,15 @@ type TransactionForServiceProviderRequest struct {
 	PaymentValidatorDID string                     `json:"payment_validator_did"`
 	ContractDID         string                     `json:"contract_did"`
 	ToAddress           []types.PaymentAddressInfo `json:"to_address"`
-	Amount              string                     `json:"amount"`
+	Metadata            map[string]interface{}     `json:"metadata,omitempty"`
+	Amount              string                     `json:"amount"`            // Original amount (in pricing currency if conversion needed)
 	Status              string                     `json:"status,omitempty"`  // optional status, defaults to "unpaid" if empty
 	TxHash              string                     `json:"tx_hash,omitempty"` // optional transaction hash
-	Metadata            map[string]interface{}     `json:"metadata,omitempty"`
+
+	// New fields for price conversion tracking (NO conversion happens here)
+	OriginalAmount     string `json:"original_amount,omitempty"`     // Amount in pricing currency (USDT)
+	PricingCurrency    string `json:"pricing_currency,omitempty"`    // Currency of original amount (e.g., "USDT")
+	RequiresConversion bool   `json:"requires_conversion,omitempty"` // True if conversion is needed
 }
 
 type TransactionForServiceProviderResponse struct {
@@ -193,10 +199,56 @@ type ContractPaymentValidationRequest struct {
 	TxHash     string `json:"tx_hash"`
 	UniqueID   string `json:"unique_id"`
 	Blockchain string `json:"blockchain"`
+	QuoteID    string `json:"quote_id,omitempty"` // Optional: quote ID for price conversion
 }
 
 type ContractPaymentValidationResponse struct {
 	Error string `json:"error"`
+}
+
+// ContractGetPaymentQuoteRequest requests a payment quote for a transaction
+type ContractGetPaymentQuoteRequest struct {
+	UniqueID string `json:"unique_id"` // Transaction unique_id
+}
+
+// ContractGetPaymentQuoteResponse returns a payment quote
+type ContractGetPaymentQuoteResponse struct {
+	QuoteID         string    `json:"quote_id,omitempty"`         // Unique quote identifier
+	OriginalAmount  string    `json:"original_amount,omitempty"`  // Amount in pricing currency (USDT)
+	ConvertedAmount string    `json:"converted_amount,omitempty"` // Amount in payment currency (NTX)
+	PricingCurrency string    `json:"pricing_currency,omitempty"` // Original currency (e.g., "USDT")
+	PaymentCurrency string    `json:"payment_currency,omitempty"` // Payment currency (e.g., "NTX")
+	ExchangeRate    string    `json:"exchange_rate,omitempty"`    // Exchange rate used
+	ExpiresAt       time.Time `json:"expires_at,omitempty"`       // Quote expiration timestamp
+	Error           string    `json:"error,omitempty"`
+}
+
+// ContractValidatePaymentQuoteRequest validates a payment quote before payment
+type ContractValidatePaymentQuoteRequest struct {
+	QuoteID string `json:"quote_id"` // Quote to validate
+}
+
+// ContractValidatePaymentQuoteResponse returns validation result
+type ContractValidatePaymentQuoteResponse struct {
+	Valid           bool      `json:"valid"`                      // Whether quote is valid
+	QuoteID         string    `json:"quote_id,omitempty"`         // Quote identifier
+	OriginalAmount  string    `json:"original_amount,omitempty"`  // Amount in pricing currency
+	ConvertedAmount string    `json:"converted_amount,omitempty"` // Amount in payment currency
+	PricingCurrency string    `json:"pricing_currency,omitempty"` // Original currency
+	PaymentCurrency string    `json:"payment_currency,omitempty"` // Payment currency
+	ExchangeRate    string    `json:"exchange_rate,omitempty"`    // Exchange rate used
+	ExpiresAt       time.Time `json:"expires_at,omitempty"`       // Quote expiration timestamp
+	Error           string    `json:"error,omitempty"`            // Error if invalid
+}
+
+// ContractCancelPaymentQuoteRequest cancels/invalidates a payment quote
+type ContractCancelPaymentQuoteRequest struct {
+	QuoteID string `json:"quote_id"` // Quote to cancel
+}
+
+// ContractCancelPaymentQuoteResponse returns cancellation result
+type ContractCancelPaymentQuoteResponse struct {
+	Error string `json:"error,omitempty"`
 }
 
 type PaymentValidateRequest struct {

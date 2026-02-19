@@ -34,6 +34,11 @@ type Transaction struct {
 	Status              string                     `json:"status"`
 	TxHash              string                     `json:"tx_hash"`
 	Metadata            map[string]interface{}     `json:"metadata,omitempty"`
+
+	// New fields for price conversion
+	OriginalAmount     string `json:"original_amount,omitempty"`     // Amount in pricing currency (USDT)
+	PricingCurrency    string `json:"pricing_currency,omitempty"`    // Currency of original amount (e.g., "USDT")
+	RequiresConversion bool   `json:"requires_conversion,omitempty"` // True if conversion is needed
 }
 
 type Store struct {

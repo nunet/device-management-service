@@ -395,6 +395,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 			cmd.Flags().StringVarP(&p.UniqueID, "unique-id", "", "", "transaction unique id (required)")
 			cmd.Flags().StringVarP(&p.TxHash, "tx-hash", "", "", "transaction hash (required)")
 			cmd.Flags().StringVarP(&p.Blockchain, "blockchain", "", "", "which blockchain was used (required)")
+			cmd.Flags().StringVarP(&p.QuoteID, "quote-id", "", "", "payment quote id (optional)")
 			_ = cmd.MarkFlagRequired("unique-id")
 			_ = cmd.MarkFlagRequired("tx-hash")
 			_ = cmd.MarkFlagRequired("blockchain")
@@ -409,6 +410,7 @@ var registeredBehaviors = map[string]*behaviorConfig{
 				UniqueID:   req.UniqueID,
 				TxHash:     req.TxHash,
 				Blockchain: req.Blockchain,
+				QuoteID:    req.QuoteID,
 			}
 
 			resp, err := dmsClient.ConfirmTransaction(ctx, request, opts.MsgOpts...)
@@ -445,6 +447,126 @@ var registeredBehaviors = map[string]*behaviorConfig{
 						Examples:
 						
 						  nunet actor cmd --context user /dms/tokenomics/contract/transactions/list`,
+	},
+	// /dms/tokenomics/contract/payment/quote/get
+	behaviors.ContractGetPaymentQuoteBehavior: {
+		Payload: func() any { return &ContractGetPaymentQuoteCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractGetPaymentQuoteCmd)
+			cmd.Flags().StringVarP(&p.UniqueID, "unique-id", "", "", "transaction unique id (required)")
+			_ = cmd.MarkFlagRequired("unique-id")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractGetPaymentQuoteCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode ContractGetPaymentQuoteCmd payload")
+			}
+
+			request := contracts.ContractGetPaymentQuoteRequest{
+				UniqueID: req.UniqueID,
+			}
+
+			resp, err := dmsClient.InvokeBehavior(ctx, behaviors.ContractGetPaymentQuoteBehavior, request, opts.MsgOpts...)
+			if err != nil {
+				return nil, fmt.Errorf("failed to invoke behavior: %w", err)
+			}
+
+			var quoteResp contracts.ContractGetPaymentQuoteResponse
+			if err := json.Unmarshal(resp.Message, &quoteResp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+			}
+
+			return quoteResp, nil
+		},
+		Action: bInvoke,
+		Short:  "Get a payment quote for a transaction",
+		Long: `Invoke the /dms/tokenomics/contract/payment/quote/get behavior on an actor
+						
+						This behavior gets a real-time payment quote for a transaction requiring currency conversion.
+						
+						Examples:
+						
+						  nunet actor cmd --context user /dms/tokenomics/contract/payment/quote/get --unique-id <unique_id>`,
+	},
+	// /dms/tokenomics/contract/payment/quote/validate
+	behaviors.ContractValidatePaymentQuoteBehavior: {
+		Payload: func() any { return &ContractValidatePaymentQuoteCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractValidatePaymentQuoteCmd)
+			cmd.Flags().StringVarP(&p.QuoteID, "quote-id", "", "", "quote id (required)")
+			_ = cmd.MarkFlagRequired("quote-id")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractValidatePaymentQuoteCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode ContractValidatePaymentQuoteCmd payload")
+			}
+
+			request := contracts.ContractValidatePaymentQuoteRequest{
+				QuoteID: req.QuoteID,
+			}
+
+			resp, err := dmsClient.InvokeBehavior(ctx, behaviors.ContractValidatePaymentQuoteBehavior, request, opts.MsgOpts...)
+			if err != nil {
+				return nil, fmt.Errorf("failed to invoke behavior: %w", err)
+			}
+
+			var validateResp contracts.ContractValidatePaymentQuoteResponse
+			if err := json.Unmarshal(resp.Message, &validateResp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+			}
+
+			return validateResp, nil
+		},
+		Action: bInvoke,
+		Short:  "Validate a payment quote",
+		Long: `Invoke the /dms/tokenomics/contract/payment/quote/validate behavior on an actor
+						
+						This behavior validates a payment quote before payment execution.
+						
+						Examples:
+						
+						  nunet actor cmd --context user /dms/tokenomics/contract/payment/quote/validate --quote-id <quote_id>`,
+	},
+	// /dms/tokenomics/contract/payment/quote/cancel
+	behaviors.ContractCancelPaymentQuoteBehavior: {
+		Payload: func() any { return &ContractCancelPaymentQuoteCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractCancelPaymentQuoteCmd)
+			cmd.Flags().StringVarP(&p.QuoteID, "quote-id", "", "", "quote id (required)")
+			_ = cmd.MarkFlagRequired("quote-id")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*ContractCancelPaymentQuoteCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode ContractCancelPaymentQuoteCmd payload")
+			}
+
+			request := contracts.ContractCancelPaymentQuoteRequest{
+				QuoteID: req.QuoteID,
+			}
+
+			resp, err := dmsClient.InvokeBehavior(ctx, behaviors.ContractCancelPaymentQuoteBehavior, request, opts.MsgOpts...)
+			if err != nil {
+				return nil, fmt.Errorf("failed to invoke behavior: %w", err)
+			}
+
+			var cancelResp contracts.ContractCancelPaymentQuoteResponse
+			if err := json.Unmarshal(resp.Message, &cancelResp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+			}
+
+			return cancelResp, nil
+		},
+		Action: bInvoke,
+		Short:  "Cancel a payment quote",
+		Long: `Invoke the /dms/tokenomics/contract/payment/quote/cancel behavior on an actor
+						
+						This behavior cancels/invalidates a payment quote.
+						
+						Examples:
+						
+						  nunet actor cmd --context user /dms/tokenomics/contract/payment/quote/cancel --quote-id <quote_id>`,
 	},
 	// /dms/tokenomics/contract/list_incoming
 	behaviors.ContractListBehavior: {

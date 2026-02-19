@@ -262,6 +262,16 @@ func TestE2E(t *testing.T) {
 	// 	}
 	// 	suite.Run(t, provisioningTask)
 	// })
+	t.Run("DeploymentWithContractUSDTQuote", func(t *testing.T) {
+		deploymentWithContractUSDTQuoteTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_contracts_usdt_quote_tests",
+			restPortIndex: ports[35],
+			p2pPortIndex:  ports[36],
+			runner:        DeployWithContractUSDTQuoteTest,
+		}
+		suite.Run(t, deploymentWithContractUSDTQuoteTests)
+	})
 	t.Run("DeploymentWithContractOrchestrationFee", func(t *testing.T) {
 		deploymentWithContractOrchestrationFeeTests := &TestSuite{
 			numNodes:      4,

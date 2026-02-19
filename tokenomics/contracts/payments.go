@@ -80,6 +80,8 @@ type PaymentDetails struct {
 
 	Addresses []types.PaymentAddressInfo `json:"addresses"`
 
+	PricingCurrency string `json:"pricing_currency,omitempty"`
+
 	// Orchestration fee configuration (optional)
 	OrchestrationFee *OrchestrationFeeConfig `json:"orchestration_fee,omitempty"`
 }
@@ -132,6 +134,5 @@ func (pd *PaymentDetails) ValidateOrchestrationFee() error {
 			return fmt.Errorf("orchestration_fee.percentage must be between 0 and 100")
 		}
 	}
-
 	return nil
 }

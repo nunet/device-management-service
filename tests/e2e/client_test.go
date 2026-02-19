@@ -122,6 +122,7 @@ func (c *Client) grant(t *testing.T, context, otherDID, passphrase string) strin
 	args := []string{
 		"cap", "grant", "--context", context,
 		"--cap", "/dms/tokenomics",
+		"--cap", "/dms/tokenomics/contract/payment",
 		"--cap", "/dms/tokenomics/contract/propose",
 		"--cap", "/dms/tokenomics/contract/state",
 		"--cap", "/dms/tokenomics/contract/chain/verify",
@@ -154,6 +155,7 @@ func (c *Client) delegate(t *testing.T, context, otherDID, passphrase string) st
 	args := []string{
 		"cap", "delegate", "--context", context,
 		"--cap", "/dms/tokenomics",
+		"--cap", "/dms/tokenomics/contract/payment",
 		"--cap", "/dms/tokenomics/contract/propose",
 		"--cap", "/dms/tokenomics/contract/state",
 		"--cap", "/dms/tokenomics/contract/chain/verify",
@@ -892,5 +894,69 @@ func (c *Client) debugFlightrec(t *testing.T, context, passphrase string) (strin
 	root.SetOutput(&buf)
 	err = root.Execute()
 	fmt.Println("createVolume response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) getPaymentQuote(t *testing.T, context, passphrase, uniqueID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/payment/quote/get", "--unique-id", uniqueID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("getPaymentQuote response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) validatePaymentQuote(t *testing.T, context, passphrase, quoteID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/payment/quote/validate", "--quote-id", quoteID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("validatePaymentQuote response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) cancelPaymentQuote(t *testing.T, context, passphrase, quoteID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/payment/quote/cancel", "--quote-id", quoteID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("cancelPaymentQuote response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) confirmLocalTransactionWithQuote(t *testing.T, context, passphrase, uniqueID, txHash, quoteID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/transactions/confirm", "--unique-id", uniqueID, "--tx-hash", txHash, "--blockchain", "ETHEREUM", "--quote-id", quoteID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("confirmLocalTransactionWithQuote response: ", buf.String())
 	return buf.String(), err
 }

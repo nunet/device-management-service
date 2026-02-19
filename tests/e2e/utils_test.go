@@ -167,6 +167,13 @@ func createConfig(userDir string, restPort uint32, p2pListenAddrs []string, boot
 			Environment: "production",
 			APIKey:      os.Getenv("ES_API"),
 		},
+		// Add CoinMarketCap configuration with defaults
+		CoinMarketCap: config.CoinMarketCapConfig{
+			APIKey:       "",                                         // Will be set in setupTestNetwork for specific tests
+			BaseURL:      "https://sandbox-api.coinmarketcap.com/v1", // Default production endpoint
+			EndpointPath: "/tools/price-conversion",                  // Default endpoint path
+			CacheTTL:     "5m",                                       // Default cache TTL
+		},
 	}
 
 	// observability

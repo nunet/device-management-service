@@ -205,13 +205,27 @@ func (pp *paymentProcessorImpl) forwardTransaction(
 	contract *contracts.Contract,
 	item *contracts.PaymentItem,
 ) error {
+	// Create transaction request
 	txReq := contracts.TransactionForServiceProviderRequest{
 		PaymentValidatorDID: contract.PaymentValidatorDID.URI,
 		UniqueID:            item.UniqueID,
 		ContractDID:         contract.ContractDID,
 		ToAddress:           contract.PaymentDetails.Addresses,
-		Amount:              item.Amount,
+		Amount:              item.Amount, // Store original amount (in pricing currency if conversion needed)
+		Status:              "unpaid",
 		Metadata:            item.Metadata,
+	}
+
+	// If pricing_currency is set, store original amount and conversion metadata
+	// NO CONVERSION HAPPENS HERE - conversion only happens at quote time
+	if contract.PaymentDetails.PricingCurrency != "" &&
+		contract.PaymentDetails.PricingCurrency != "NTX" {
+		// Store original amount in pricing currency (e.g., USDT)
+		// The Amount field contains the original amount in pricing currency
+		// Conversion to NTX will happen later when user requests a quote
+		txReq.OriginalAmount = item.Amount
+		txReq.PricingCurrency = contract.PaymentDetails.PricingCurrency
+		txReq.RequiresConversion = true
 	}
 
 	destination, err := actor.HandleFromDID(contract.ContractParticipants.Requestor.URI)

@@ -564,11 +564,37 @@ func (s *TestSuite) setupTestNetwork() {
 				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9427/"
 				cfg.PaymentProvider.Mode = true
 			}
-		}
+		case "deployment_with_contracts_orchestration_fee_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9428/"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_usdt_price_conversion_tests":
+			// Configure CoinMarketCap sandbox API for all nodes
+			// This is set for all nodes in the test (similar to how PaymentProvider is configured)
+			cfg.CoinMarketCap.APIKey = "4851bf9c832340328bc48b10cab272f7"
+			cfg.CoinMarketCap.BaseURL = "https://pro-api.coinmarketcap.com/v2"
+			cfg.CoinMarketCap.EndpointPath = "/tools/price-conversion"
+			cfg.CoinMarketCap.CacheTTL = "1s" // Short TTL for testing
 
-		if s.Name == "deployment_with_contracts_collect_after_pay_tests" && nodeIndex == 3 {
-			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9425/"
-			cfg.PaymentProvider.Mode = true
+			// Also configure PaymentProvider for payment validator (node 3)
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9429/" // Use different port to avoid conflicts
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_usdt_quote_tests":
+			// Configure CoinMarketCap sandbox API for all nodes
+			cfg.CoinMarketCap.APIKey = "4851bf9c832340328bc48b10cab272f7"
+			cfg.CoinMarketCap.BaseURL = "https://pro-api.coinmarketcap.com/v2"
+			cfg.CoinMarketCap.EndpointPath = "/tools/price-conversion"
+			cfg.CoinMarketCap.CacheTTL = "1s" // Short TTL for testing
+			cfg.CoinMarketCap.QuoteTTL = "2m" // Quote TTL for testing
+
+			// Also configure PaymentProvider for payment validator (node 3)
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9428/" // Use different port to avoid conflicts
+				cfg.PaymentProvider.Mode = true
+			}
 		}
 
 		var err error

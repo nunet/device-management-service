@@ -385,7 +385,7 @@ func ImportPRISMPrivateKeyFromJWK(jwkData []byte, _ DID) (crypto.PrivKey, error)
 	switch jwk.Crv {
 	case curveEd25519:
 		return importEd25519PrivateKeyFromJWK(jwk)
-	case "secp256k1":
+	case curveSecp256k1:
 		return importSecp256k1PrivateKeyFromJWK(jwk)
 	default:
 		return nil, fmt.Errorf("unsupported curve: %s", jwk.Crv)
