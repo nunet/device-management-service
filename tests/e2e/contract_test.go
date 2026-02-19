@@ -3554,7 +3554,7 @@ func DeployWithContractChainTest(suite *TestSuite) {
 			"requesterAddr":       "0x4741783ed607d1496f65749d2d9c94cf6c23352a",
 			"providerAddr":        "0xe66b31678d6c16e9ebf358268a790b763c133750",
 			"feesPerAllocation":   "10",
-			"paymentModel":        string(contracts.PayPerAllocation),
+			"paymentModel":        string(contracts.PayPerTimeUtilization),
 			"resourceTimeUnit":    "minute",
 			"paymentPeriod":       "minute",
 			"paymentPeriodCount":  "1",
