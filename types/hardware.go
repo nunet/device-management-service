@@ -95,6 +95,9 @@ type GPU struct {
 	Model string `json:"model" description:"GPU model, e.g., Tesla T4, A100"`
 	// VRAM is the total amount of VRAM on the device
 	VRAM uint64 `json:"vram" description:"Total amount of VRAM on the device"`
+	// Cores is the number of compute cores on the GPU
+	// (CUDA cores for NVIDIA, Compute Units for AMD, 0 if unknown)
+	Cores uint32 `json:"cores" description:"Number of compute cores (CUDA cores / Compute Units)"`
 	// UUID is the unique identifier of the device
 	UUID string `json:"uuid" description:"Unique identifier of the device"`
 }
@@ -148,6 +151,7 @@ func (g *GPU) Subtract(other GPU) error {
 func (g *GPU) Equal(other GPU) bool {
 	return g.Model == other.Model &&
 		g.VRAM == other.VRAM &&
+		g.Cores == other.Cores &&
 		g.Index == other.Index &&
 		g.Vendor == other.Vendor &&
 		g.PCIAddress == other.PCIAddress

@@ -49,6 +49,7 @@ DEFINE_AMDSMI_FUNC_TYPE(amdsmi_status_t, amdsmi_get_gpu_id, (amdsmi_processor_ha
 DEFINE_AMDSMI_FUNC_TYPE(amdsmi_status_t, amdsmi_get_gpu_device_uuid, (amdsmi_processor_handle processor_handle, unsigned int *uuid_length, char *uuid));
 DEFINE_AMDSMI_FUNC_TYPE(amdsmi_status_t, amdsmi_get_gpu_vram_usage, (amdsmi_processor_handle processor_handle, amdsmi_vram_usage_t *vram_info));
 DEFINE_AMDSMI_FUNC_TYPE(amdsmi_status_t, amdsmi_get_gpu_bdf_id, (amdsmi_processor_handle processor_handle, uint64_t *bdf_id));
+DEFINE_AMDSMI_FUNC_TYPE(amdsmi_status_t, amdsmi_get_gpu_asic_info, (amdsmi_processor_handle processor_handle, amdsmi_asic_info_t *info));
 
 // ========================
 // AMD SMI Function Pointers Struct
@@ -66,6 +67,7 @@ typedef struct {
     amdsmi_get_gpu_device_uuid_fp amdsmi_get_gpu_device_uuid;
     amdsmi_get_gpu_vram_usage_fp amdsmi_get_gpu_vram_usage;
     amdsmi_get_gpu_bdf_id_fp amdsmi_get_gpu_bdf_id;
+    amdsmi_get_gpu_asic_info_fp amdsmi_get_gpu_asic_info;
 } amdsmi_functions_t;
 
 // ========================
@@ -87,6 +89,14 @@ static amdsmi_functions_t amdsmi_funcs;
         dlclose(lib_handle); \
         lib_handle = NULL; \
         return 0; \
+    }
+
+// Macro to load a symbol optionally (does not abort if symbol is missing).
+// Use for symbols that may not exist in older library versions.
+#define LOAD_AMDSMI_SYMBOL_OPTIONAL(func_name) \
+    amdsmi_funcs.func_name = (func_name##_fp)dlsym(lib_handle, #func_name); \
+    if (!amdsmi_funcs.func_name) { \
+        dlerror(); \
     }
 
 // Macro to define a wrapper function
@@ -129,6 +139,9 @@ int load_amdsmi_library() {
     LOAD_AMDSMI_SYMBOL(amdsmi_get_gpu_vram_usage)
     LOAD_AMDSMI_SYMBOL(amdsmi_get_gpu_bdf_id)
 
+    // Optional symbols (may not exist in older library versions)
+    LOAD_AMDSMI_SYMBOL_OPTIONAL(amdsmi_get_gpu_asic_info)
+
     return 1;
 }
 
@@ -150,6 +163,7 @@ void unload_amdsmi_library() {
         amdsmi_funcs.amdsmi_get_gpu_device_uuid = NULL;
         amdsmi_funcs.amdsmi_get_gpu_vram_usage = NULL;
         amdsmi_funcs.amdsmi_get_gpu_bdf_id = NULL;
+        amdsmi_funcs.amdsmi_get_gpu_asic_info = NULL;
     }
 }
 
@@ -169,6 +183,12 @@ DEFINE_AMDSMI_WRAPPER(amdsmi_status_t, call_amdsmi_get_gpu_id, amdsmi_get_gpu_id
 DEFINE_AMDSMI_WRAPPER(amdsmi_status_t, call_amdsmi_get_gpu_device_uuid, amdsmi_get_gpu_device_uuid, (amdsmi_processor_handle processor_handle, unsigned int *uuid_length, char *uuid), processor_handle, uuid_length, uuid)
 DEFINE_AMDSMI_WRAPPER(amdsmi_status_t, call_amdsmi_get_gpu_vram_usage, amdsmi_get_gpu_vram_usage, (amdsmi_processor_handle processor_handle, amdsmi_vram_usage_t *vram_info), processor_handle, vram_info)
 DEFINE_AMDSMI_WRAPPER(amdsmi_status_t, call_amdsmi_get_gpu_bdf_id, amdsmi_get_gpu_bdf_id, (amdsmi_processor_handle processor_handle, uint64_t *bdf_id), processor_handle, bdf_id)
+DEFINE_AMDSMI_WRAPPER(amdsmi_status_t, call_amdsmi_get_gpu_asic_info, amdsmi_get_gpu_asic_info, (amdsmi_processor_handle processor_handle, amdsmi_asic_info_t *info), processor_handle, info)
+
+// is_gpu_asic_info_available checks if amdsmi_get_gpu_asic_info was loaded
+int is_gpu_asic_info_available() {
+    return amdsmi_funcs.amdsmi_get_gpu_asic_info != NULL ? 1 : 0;
+}
 */
 import "C"
 
@@ -385,4 +405,33 @@ func GetGPUVRAM(processor ProcessorHandle) (VRAM, Status) {
 		Used:  uint32(vramUsage.vram_used),
 	}
 	return goVRAM, Status{Code: StatusSuccess}
+}
+
+// GetGPUASICInfo retrieves the ASIC information for a given GPU processor handle.
+// This includes the number of compute units (GPU cores).
+// Returns an error status if the function is not available in the loaded library.
+func GetGPUASICInfo(processor ProcessorHandle) (ASICInfo, Status) {
+	if C.is_gpu_asic_info_available() == 0 {
+		return ASICInfo{}, Status{Code: StatusNotSupported, Message: "amdsmi_get_gpu_asic_info not available in loaded library"}
+	}
+
+	var asicInfo C.amdsmi_asic_info_t
+	ret := C.call_amdsmi_get_gpu_asic_info(C.amdsmi_processor_handle(processor.handle), &asicInfo)
+	if ret != C.AMDSMI_STATUS_SUCCESS {
+		return ASICInfo{}, Status{Code: StatusCode(ret), Message: "get GPU ASIC info"}
+	}
+
+	goASICInfo := ASICInfo{
+		MarketName:       C.GoString(&asicInfo.market_name[0]),
+		VendorID:         uint32(asicInfo.vendor_id),
+		VendorName:       C.GoString(&asicInfo.vendor_name[0]),
+		SubvendorID:      uint32(asicInfo.subvendor_id),
+		DeviceID:         uint64(asicInfo.device_id),
+		RevID:            uint32(asicInfo.rev_id),
+		ASICSerial:       C.GoString(&asicInfo.asic_serial[0]),
+		OAMID:            uint32(asicInfo.oam_id),
+		NumComputeUnits:  uint32(asicInfo.num_of_compute_units),
+		TargetGfxVersion: uint64(asicInfo.target_graphics_version),
+	}
+	return goASICInfo, Status{Code: StatusSuccess}
 }

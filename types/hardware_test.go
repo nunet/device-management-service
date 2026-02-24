@@ -268,6 +268,42 @@ func TestHardware_Comparable_Compare(t *testing.T) {
 				},
 				want: Better,
 			},
+			{
+				name: "Compare ignores Cores - equal VRAM different cores",
+				g1: GPU{
+					Index:      0,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.C",
+					Model:      "Tesla A100",
+					VRAM:       16384,
+					Cores:      6912,
+				},
+				g2: GPU{
+					Index:      1,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.D",
+					Model:      "Tesla T4",
+					VRAM:       16384,
+					Cores:      2560,
+				},
+				want: Equal,
+			},
+			{
+				name: "Compare ignores Cores - zero cores",
+				g1: GPU{
+					Index:  0,
+					Vendor: GPUVendorNvidia,
+					VRAM:   16384,
+					Cores:  0,
+				},
+				g2: GPU{
+					Index:  1,
+					Vendor: GPUVendorNvidia,
+					VRAM:   16384,
+					Cores:  6912,
+				},
+				want: Equal,
+			},
 		}
 
 		for _, tt := range tests {
@@ -906,6 +942,66 @@ func TestHardware_Equal(t *testing.T) {
 					VRAM:       16384,
 				},
 				want: false,
+			},
+			{
+				name: "Equal GPUs with same Cores",
+				g1: GPU{
+					Index:      0,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.C",
+					Model:      "Tesla A100",
+					VRAM:       16384,
+					Cores:      6912,
+				},
+				g2: GPU{
+					Index:      0,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.C",
+					Model:      "Tesla A100",
+					VRAM:       16384,
+					Cores:      6912,
+				},
+				want: true,
+			},
+			{
+				name: "Different Cores makes GPUs unequal",
+				g1: GPU{
+					Index:      0,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.C",
+					Model:      "Tesla A100",
+					VRAM:       16384,
+					Cores:      6912,
+				},
+				g2: GPU{
+					Index:      0,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.C",
+					Model:      "Tesla A100",
+					VRAM:       16384,
+					Cores:      2560,
+				},
+				want: false,
+			},
+			{
+				name: "Zero Cores equals zero Cores (backwards compat)",
+				g1: GPU{
+					Index:      0,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.C",
+					Model:      "Tesla T4A100",
+					VRAM:       16384,
+					Cores:      0,
+				},
+				g2: GPU{
+					Index:      0,
+					Vendor:     GPUVendorNvidia,
+					PCIAddress: "AAAA:BB:CC.C",
+					Model:      "Tesla T4A100",
+					VRAM:       16384,
+					Cores:      0,
+				},
+				want: true,
 			},
 		}
 

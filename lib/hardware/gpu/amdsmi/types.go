@@ -41,3 +41,17 @@ type VRAM struct {
 	Used     uint32
 	Reserved [5]uint64
 }
+
+// ASICInfo is a Go representation of the C amdsmi_asic_info_t struct.
+type ASICInfo struct {
+	MarketName       string
+	VendorID         uint32
+	VendorName       string
+	SubvendorID      uint32
+	DeviceID         uint64
+	RevID            uint32
+	ASICSerial       string
+	OAMID            uint32 // 0xFFFF if not supported
+	NumComputeUnits  uint32 // 0xFFFFFFFF if not supported
+	TargetGfxVersion uint64 // 0xFFFFFFFFFFFFFFFF if not supported
+}

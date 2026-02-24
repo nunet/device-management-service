@@ -252,6 +252,7 @@ func (o *Onboarding) validatePrerequisites(config types.OnboardingConfig) error 
 				"gpuIndex", gpu.Index,
 				"gpuModel", gpu.Model,
 				"gpuVramGB", gpu.VRAMInGB(),
+				"gpuCores", gpu.Cores,
 				"gpuLogIndex", idx, // just to see the loop index
 			)
 		}
@@ -280,6 +281,7 @@ func (o *Onboarding) validatePrerequisites(config types.OnboardingConfig) error 
 				"gpuIndex", gpu.Index,
 				"gpuModel", gpu.Model,
 				"gpuVramGB", gpu.VRAMInGB(),
+				"gpuCores", gpu.Cores,
 				"gpuLogIndex", idx,
 			)
 		}

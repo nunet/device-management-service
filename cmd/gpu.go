@@ -67,8 +67,8 @@ func newGPUListCommand() *cobra.Command {
 
 			fmt.Println("GPU Details:")
 			for i, g := range gpus {
-				fmt.Printf("Model: %s, Total VRAM: %d GB, Used VRAM: %d GB, Vendor: %s, PCI Address: %s, UUID: %s, Index: %d\n",
-					g.Model, g.VRAMInGB(), gpuUsage[i].VRAMInGB(), g.Vendor, g.PCIAddress, g.UUID, g.Index)
+				fmt.Printf("Model: %s, Total VRAM: %d GB, Used VRAM: %d GB, Cores: %d, Vendor: %s, PCI Address: %s, UUID: %s, Index: %d\n",
+					g.Model, g.VRAMInGB(), gpuUsage[i].VRAMInGB(), g.Cores, g.Vendor, g.PCIAddress, g.UUID, g.Index)
 			}
 			return nil
 		},
