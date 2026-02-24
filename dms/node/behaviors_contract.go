@@ -854,7 +854,7 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 		}
 
 		// deduct some block numbers
-		blockNum -= 1800 // 5 hours back approx
+		blockNum -= 45000 // 5 days back approx
 		blockNumHex := fmt.Sprintf("0x%x", blockNum)
 
 		txs, err := ethereumClient.GetERC20Transfers(
