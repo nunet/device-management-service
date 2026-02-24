@@ -15,6 +15,7 @@ import (
 	"strconv"
 
 	"gitlab.com/nunet/device-management-service/lib/hardware/gpu/xpum"
+	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -98,10 +99,30 @@ func (i *intelGPUConnector) GetGPUs() (types.GPUs, error) {
 			return nil, fmt.Errorf("get total VRAM for intel device %d: %w", device.DeviceID, err)
 		}
 
+		// Get EU (Execution Unit) count; default to 0 if unavailable
+		var cores uint32
+		deviceProps, ret := xpum.GetDeviceProperties(device.DeviceID)
+		if ret.Code == xpum.ResultOk {
+			for _, prop := range deviceProps {
+				if prop.Name == xpum.DevicePropertyNumberOfEUs {
+					euCount, err := strconv.ParseUint(prop.Value, 10, 32)
+					if err == nil {
+						cores = uint32(euCount)
+					} else {
+						log.Debugw("could not parse EU count for Intel GPU",
+							"labels", string(observability.LabelNode),
+							"error", err, "deviceID", device.DeviceID)
+					}
+					break
+				}
+			}
+		}
+
 		gpu := types.GPU{
 			UUID:       device.UUID,
 			Model:      device.DeviceName,
 			VRAM:       vram, // VRAM in bytes
+			Cores:      cores,
 			Vendor:     types.GPUVendorIntel,
 			PCIAddress: device.PCIBDFAddress,
 		}

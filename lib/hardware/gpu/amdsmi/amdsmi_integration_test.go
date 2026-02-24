@@ -109,6 +109,23 @@ func (s *AMDSMITestSuite) TestGPUVRAM() {
 	s.Assert().LessOrEqual(vr.Used, vr.Total, "VRAM.Used must not exceed Total")
 }
 
+// TestGPUASICInfo checks that ASIC info struct is populated with compute units
+func (s *AMDSMITestSuite) TestGPUASICInfo() {
+	asicInfo, st := GetGPUASICInfo(s.gpu)
+	if st.Code == StatusNotSupported {
+		s.T().Skip("SKIP: amdsmi_get_gpu_asic_info not available in loaded library")
+	}
+	s.Require().Equal(StatusSuccess, st.Code)
+	s.Assert().NotEmpty(asicInfo.MarketName, "MarketName should be set")
+	s.Assert().Greater(asicInfo.VendorID, uint32(0), "VendorID should be set")
+	// NumComputeUnits should be > 0 for any real AMD GPU
+	// 0xFFFFFFFF means not supported -- still a valid response
+	if asicInfo.NumComputeUnits != 0xFFFFFFFF {
+		s.Assert().Greater(asicInfo.NumComputeUnits, uint32(0),
+			"NumComputeUnits should be positive when supported")
+	}
+}
+
 func TestAMDSMITestSuite(t *testing.T) {
 	suite.Run(t, new(AMDSMITestSuite))
 }

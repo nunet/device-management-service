@@ -112,10 +112,18 @@ func (a *amdGPUConnector) GetGPUs() (types.GPUs, error) {
 			return nil, fmt.Errorf("get GPU UUID: %w", ret.Error())
 		}
 
+		// Get compute unit count; default to 0 if unavailable
+		var cores uint32
+		asicInfo, ret := goamdsmi.GetGPUASICInfo(processor)
+		if ret.Code == goamdsmi.StatusSuccess && asicInfo.NumComputeUnits != 0xFFFFFFFF {
+			cores = asicInfo.NumComputeUnits
+		}
+
 		gpu := types.GPU{
 			UUID:       uuid,
 			Model:      boardInfo.ProductName,
 			VRAM:       types.ConvertMibToBytes(uint64(vRAM.Total)),
+			Cores:      cores,
 			Vendor:     types.GPUVendorAMDATI,
 			PCIAddress: bdfIDToPCIAddress(bdfID),
 		}

@@ -179,6 +179,7 @@ To add a new XPUM function, follow these steps:
 const (
 	StatsMemoryUsed                      = C.XPUM_STATS_MEMORY_USED
 	DevicePropertyMemoryPhysicalSizeByte = C.XPUM_DEVICE_PROPERTY_MEMORY_PHYSICAL_SIZE_BYTE
+	DevicePropertyNumberOfEUs            = C.XPUM_DEVICE_PROPERTY_NUMBER_OF_EUS
 )
 
 // Init initializes the Intel XPUM library.
