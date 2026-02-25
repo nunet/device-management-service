@@ -672,6 +672,42 @@ func (c *Client) deploymentManifest(
 	return resp.Manifest, nil
 }
 
+func (c *Client) deploymentInfo(t *testing.T, context, passphrase, deploymentID string, includeUsage bool) (node.DeploymentInfoResponse, error) {
+	t.Helper()
+	var resp node.DeploymentInfoResponse
+
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	if err != nil {
+		return node.DeploymentInfoResponse{}, fmt.Errorf("failed to set env: %w", err)
+	}
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/info", "--id", deploymentID}
+	if includeUsage {
+		args = append(args, "--usage")
+	}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	if err != nil {
+		return node.DeploymentInfoResponse{}, fmt.Errorf("failed to execute deployment info command: %w", err)
+	}
+
+	err = json.Unmarshal(buf.Bytes(), &resp)
+	if err != nil {
+		return node.DeploymentInfoResponse{}, fmt.Errorf("unmarshal deployment info response: %w", err)
+	}
+
+	if resp.Error != "" {
+		return node.DeploymentInfoResponse{}, errors.New(resp.Error)
+	}
+
+	return resp, nil
+}
+
 func (c *Client) allocationsList(context, passphrase string) ([]jobs.AllocationInfo, error) {
 	var resp node.AllocationsListResponse
 
