@@ -247,19 +247,15 @@ func (o *BasicOrchestrator) handleAllocationStatusUpdate(msg actor.Envelope) {
 	}
 
 	manifestKey := allocID.ManifestKey()
-
-	o.lock.Lock()
-	if a, ok := o.manifest.Allocations[manifestKey]; ok {
-		// Store push status as supplementary info
-		oldManifestStatus := a.Status
-		a.Status = jtypes.AllocationStatus(update.NewStatus)
-		o.manifest.Allocations[manifestKey] = a
-
-		log.Debugw("updated_manifest_from_push",
-			"allocationID", update.AllocationID,
-			"old_manifest_status", oldManifestStatus,
-			"new_push_status", update.NewStatus,
-			"note", "supervisor pull checks remain authoritative")
+	manifest := o.Manifest()
+	a, ok := manifest.Allocations[manifestKey]
+	if !ok {
+		log.Debugf("allocation %s not found on the manifest", update.AllocationID)
+		return
 	}
-	o.lock.Unlock()
+
+	// update allocation status
+	a.Status = jtypes.AllocationStatus(update.NewStatus)
+	manifest.Allocations[manifestKey] = a
+	o.updateManifest(manifest)
 }
