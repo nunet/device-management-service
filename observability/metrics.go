@@ -41,8 +41,11 @@ var (
 	AllocNetRx          metric.Int64Gauge
 	AllocNetTx          metric.Int64Gauge
 
-	TxPaidAmount    metric.Float64Counter
-	TxCreatedAmount metric.Float64Counter
+	TxPaidAmount     metric.Float64Counter
+	TxPaidFeesAmount metric.Float64Counter
+
+	TxCreatedAmount    metric.Float64Counter
+	TxCreatedUSDAmount metric.Float64Counter
 )
 
 func initMetrics(ctx context.Context) error {
@@ -489,9 +492,28 @@ func transactionMetrics(_ context.Context) error {
 	if err != nil {
 		return err
 	}
+	TxPaidFeesAmount, err = meter.Float64Counter("dms.transaction.paid.fees.amount",
+		metric.WithDescription("Total amount of paid fees"),
+		metric.WithUnit("{NTX}"),
+		// did: string
+		// attribute.String("ContractDID", tx.ContractDID),
+	)
+	if err != nil {
+		return err
+	}
 	TxCreatedAmount, err = meter.Float64Counter("dms.transaction.created.amount",
 		metric.WithDescription("Total amount of created transactions"),
 		metric.WithUnit("{NTX}"),
+		// did: string
+		// attribute.String("ContractDID", req.ContractDID),
+	)
+	if err != nil {
+		return err
+	}
+
+	TxCreatedUSDAmount, err = meter.Float64Counter("dms.transaction.created.usd.amount",
+		metric.WithDescription("Total amount of created transactions in USD"),
+		metric.WithUnit("USD"),
 		// did: string
 		// attribute.String("ContractDID", req.ContractDID),
 	)
