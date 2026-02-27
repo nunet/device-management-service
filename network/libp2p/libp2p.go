@@ -1303,15 +1303,29 @@ func (l *Libp2p) waitForObservedAddr(ctx context.Context) (multiaddr.Multiaddr, 
 	l.observeAddrMx.RUnlock()
 
 	// otherwise wait for the signal
+	done := make(chan struct{})
+	var addr multiaddr.Multiaddr
+	var err error
+
+	go func() {
+		l.observeAddrMx.Lock()
+		defer l.observeAddrMx.Unlock()
+		for l.observedAddr == nil && ctx.Err() == nil {
+			l.observedAddrCond.Wait()
+		}
+		if l.observedAddr != nil {
+			addr = l.observedAddr
+		} else {
+			err = ctx.Err()
+		}
+		close(done)
+	}()
+
 	select {
-	default:
-		l.observedAddrCond.Wait()
-		l.observeAddrMx.RLock()
-		defer l.observeAddrMx.RUnlock()
-		addr := l.observedAddr
-		return addr, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-done:
+		return addr, err
 	}
 }
 
