@@ -82,6 +82,7 @@ type Orchestrator interface {
 	ActorPrivateKey() crypto.PrivKey
 	DeploymentSnapshot() jtypes.DeploymentSnapshot
 	AllocationInfo() map[string]jtypes.AllocationInfo
+	UpdateAllocationStatus()
 	Done() <-chan struct{}
 }
 
@@ -774,6 +775,7 @@ func (o *BasicOrchestrator) updateManifest(m jtypes.EnsembleManifest) {
 	// might inherit map references of partial updates
 	o.manifest = m.Clone()
 	o.lock.Unlock()
+	o.UpdateAllocationStatus()
 }
 
 // monitorOnlyTaskManifest will be responsible for tearing down
@@ -831,6 +833,26 @@ func (o *BasicOrchestrator) AllocationInfo() map[string]jtypes.AllocationInfo {
 		allocsCopy[k] = v
 	}
 	return allocsCopy
+}
+
+func (o *BasicOrchestrator) UpdateAllocationStatus() {
+	manifest := o.Manifest()
+	if manifest.Allocations == nil {
+		return
+	}
+
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	for _, a := range manifest.Allocations {
+		if _, ok := o.allocs[a.ID]; !ok {
+			continue
+		}
+
+		allocInfo := o.allocs[a.ID]
+		allocInfo.Status = a.Status
+		o.allocs[a.ID] = allocInfo
+	}
 }
 
 func (o *BasicOrchestrator) RegisterBehaviors() error {

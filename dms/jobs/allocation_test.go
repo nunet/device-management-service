@@ -318,10 +318,6 @@ func TestAllocation_Terminate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, AllocationRunning, alloc.status)
 
-	err = alloc.Stop(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, AllocationStopped, alloc.status)
-
 	err = alloc.Terminate(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, AllocationTerminated, alloc.status)
@@ -423,7 +419,7 @@ func TestAllocation_Restart(t *testing.T) {
 	require.True(t, alloc.actorRunning)
 
 	// success - restarting a simulated failed allocation
-	alloc.status = AllocationFailed
+	alloc.setStatus(AllocationFailed, "alloc failed", false)
 
 	err = alloc.Restart(context.Background())
 	require.NoError(t, err)

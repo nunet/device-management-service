@@ -56,8 +56,7 @@ func (o *BasicOrchestrator) Shutdown() error {
 		"orchestratorID", o.id)
 
 	defer func() {
-		o.lock.Unlock()
-		// set alloc statuses
+		// set statuses on alloc manifest
 		for allocName, status := range allocStatuses {
 			err := o.manifest.UpdateAllocation(allocName, func(alloc *jtypes.AllocationManifest) {
 				alloc.Status = status
@@ -66,6 +65,8 @@ func (o *BasicOrchestrator) Shutdown() error {
 				log.Errorf("failed to update allocation manifest %s status: %v", allocName, err)
 			}
 		}
+
+		o.lock.Unlock()
 
 		log.Infow("status updated",
 			"labels", []string{string(observability.LabelDeployment)},
@@ -92,6 +93,8 @@ func (o *BasicOrchestrator) Shutdown() error {
 				Payload:         evt,
 			})
 		}
+
+		o.UpdateAllocationStatus()
 	}()
 
 	destroyHandles := map[string]actor.Handle{}
