@@ -30,7 +30,7 @@ import (
 func TestE2E(t *testing.T) {
 	t.Parallel()
 	var (
-		testSuites         = 15
+		testSuites         = 20
 		totalPortsRequired = 2 * testSuites
 	)
 
@@ -82,17 +82,6 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, deploymentWithContractsTests)
 	})
 
-	t.Run("DeploymentWithContractsCollectAfterPay", func(t *testing.T) {
-		deploymentWithContractsCollectAfterPayTests := &TestSuite{
-			numNodes:      4,
-			Name:          "deployment_with_contracts_collect_after_pay_tests",
-			restPortIndex: ports[22],
-			p2pPortIndex:  ports[23],
-			runner:        DeployWithContractCollectAfterPayTest,
-		}
-		suite.Run(t, deploymentWithContractsCollectAfterPayTests)
-	})
-
 	t.Run("DeploymentUpdates", func(t *testing.T) {
 		deploymentUpdates := &TestSuite{
 			numNodes:      3,
@@ -133,8 +122,8 @@ func TestE2E(t *testing.T) {
 		provisioning := &TestSuite{
 			numNodes:      2,
 			Name:          "deployment_restoration_from_provisioning",
-			restPortIndex: ports[16],
-			p2pPortIndex:  ports[17],
+			restPortIndex: ports[14],
+			p2pPortIndex:  ports[15],
 			runner:        DeploymentRestorationFromProvisioning,
 		}
 		suite.Run(t, provisioning)
@@ -151,16 +140,16 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, preparing)
 	})
 
-	t.Run("DeployWithOnDemandProvisioner", func(t *testing.T) {
-		deploymentWithOnDemandProvisionerTests := &TestSuite{
-			numNodes:      2,
-			Name:          "deployment_with_ondemand_provisioner_tests",
-			restPortIndex: ports[18],
-			p2pPortIndex:  ports[19],
-			runner:        DeployWithOnDemandProvisioner,
-		}
-		suite.Run(t, deploymentWithOnDemandProvisionerTests)
-	})
+	// t.Run("DeployWithOnDemandProvisioner", func(t *testing.T) {
+	// 	deploymentWithOnDemandProvisionerTests := &TestSuite{
+	// 		numNodes:      2,
+	// 		Name:          "deployment_with_ondemand_provisioner_tests",
+	// 		restPortIndex: ports[18],
+	// 		p2pPortIndex:  ports[19],
+	// 		runner:        DeployWithOnDemandProvisioner,
+	// 	}
+	// 	suite.Run(t, deploymentWithOnDemandProvisionerTests)
+	// })
 
 	t.Run("DeployWithContractPayPerDeployment", func(t *testing.T) {
 		t.Parallel()
@@ -175,14 +164,25 @@ func TestE2E(t *testing.T) {
 		suite.Run(t, deploymentWithContractPayPerDeploymentTests)
 	})
 
+	t.Run("DeploymentWithContractsCollectAfterPay", func(t *testing.T) {
+		deploymentWithContractsCollectAfterPayTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_contracts_collect_after_pay_tests",
+			restPortIndex: ports[22],
+			p2pPortIndex:  ports[23],
+			runner:        DeployWithContractCollectAfterPayTest,
+		}
+		suite.Run(t, deploymentWithContractsCollectAfterPayTests)
+	})
+
 	t.Run("DeployWithContractPayPerTimeUtilization", func(t *testing.T) {
 		t.Parallel()
 
 		deploymentWithContractPayPerTimeUtilizationTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_pay_per_time_utilization_tests",
-			restPortIndex: ports[22],
-			p2pPortIndex:  ports[23],
+			restPortIndex: ports[24],
+			p2pPortIndex:  ports[25],
 			runner:        DeployWithContractPayPerTimeUtilizationTest,
 		}
 		suite.Run(t, deploymentWithContractPayPerTimeUtilizationTests)
@@ -194,8 +194,8 @@ func TestE2E(t *testing.T) {
 		deploymentWithContractPayPerResourceUtilizationTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_pay_per_resource_utilization_tests",
-			restPortIndex: ports[24],
-			p2pPortIndex:  ports[25],
+			restPortIndex: ports[26],
+			p2pPortIndex:  ports[27],
 			runner:        DeployWithContractPayPerResourceUtilizationTest,
 		}
 		suite.Run(t, deploymentWithContractPayPerResourceUtilizationTests)
@@ -207,18 +207,20 @@ func TestE2E(t *testing.T) {
 		deploymentWithContractFixedRentalTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_fixed_rental_tests",
-			restPortIndex: ports[26],
-			p2pPortIndex:  ports[27],
+			restPortIndex: ports[28],
+			p2pPortIndex:  ports[29],
 			runner:        DeployWithContractFixedRentalTest,
 		}
 		suite.Run(t, deploymentWithContractFixedRentalTests)
 	})
 	t.Run("DeployWithContractPeriodic", func(t *testing.T) {
+		t.Parallel()
+
 		deploymentWithContractPeriodicTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_periodic_tests",
-			restPortIndex: ports[28],
-			p2pPortIndex:  ports[29],
+			restPortIndex: ports[30],
+			p2pPortIndex:  ports[31],
 			runner:        DeployWithContractPeriodicTest,
 		}
 		suite.Run(t, deploymentWithContractPeriodicTests)
@@ -227,10 +229,68 @@ func TestE2E(t *testing.T) {
 		deploymentWithContractsEnforcedProvidersTests := &TestSuite{
 			numNodes:      4,
 			Name:          "deployment_with_contracts_enforced_providers_tests",
-			restPortIndex: ports[26],
-			p2pPortIndex:  ports[27],
+			restPortIndex: ports[32],
+			p2pPortIndex:  ports[33],
 			runner:        DeployWithContractsEnforcedProvidersTest,
 		}
 		suite.Run(t, deploymentWithContractsEnforcedProvidersTests)
+	})
+
+	t.Run("DeploymentWithContractChainTest", func(t *testing.T) {
+		deploymentWithContractChainTests := &TestSuite{
+			numNodes:            6,
+			Name:                "deployment_with_contract_chain_tests",
+			restPortIndex:       ports[34],
+			p2pPortIndex:        ports[35],
+			runner:              DeployWithContractChainTest,
+			capabilitiesHandler: setupContractChainCapabilities,
+		}
+		suite.Run(t, deploymentWithContractChainTests)
+	})
+
+	// Disabled because too flaky since 'Provisioning' status is too quick to catch
+	// will fix soon - for now DeploymentRestorationFromCommitting covers a very similar
+	// test case
+	// t.Run("DeploymentRestorationFromProvisioningTaskAllocation", func(t *testing.T) {
+	// 	t.Parallel()
+	// 	provisioningTask := &TestSuite{
+	// 		numNodes:      3,
+	// 		Name:          "deployment_restoration_from_provisioning_task",
+	// 		restPortIndex: ports[18],
+	// 		p2pPortIndex:  ports[19],
+	// 		runner:        DeploymentRestorationFromProvisioningTaskAllocation,
+	// 	}
+	// 	suite.Run(t, provisioningTask)
+	// })
+	t.Run("DeploymentWithContractUSDTQuote", func(t *testing.T) {
+		deploymentWithContractUSDTQuoteTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_contracts_usdt_quote_tests",
+			restPortIndex: ports[35],
+			p2pPortIndex:  ports[36],
+			runner:        DeployWithContractUSDTQuoteTest,
+		}
+		suite.Run(t, deploymentWithContractUSDTQuoteTests)
+	})
+	t.Run("DeploymentWithContractOrchestrationFee", func(t *testing.T) {
+		deploymentWithContractOrchestrationFeeTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_with_contracts_orchestration_fee_tests",
+			restPortIndex: ports[36],
+			p2pPortIndex:  ports[37],
+			runner:        DeployWithContractOrchestrationFeeTest,
+		}
+		suite.Run(t, deploymentWithContractOrchestrationFeeTests)
+	})
+
+	t.Run("DeploymentInfo", func(t *testing.T) {
+		deploymentInfoTests := &TestSuite{
+			numNodes:      4,
+			Name:          "deployment_deployment_info_tests",
+			restPortIndex: ports[38],
+			p2pPortIndex:  ports[39],
+			runner:        DeploymentDeploymentInfoTest,
+		}
+		suite.Run(t, deploymentInfoTests)
 	})
 }

@@ -237,7 +237,16 @@ func (c *ContractActor) SetupParticipantsCapabilities(participants contracts.Con
 	err := c.Security().Grant(
 		participants.Provider,
 		c.ContractDID,
-		[]ucan.Capability{behaviors.ContractEventsBehavior, behaviors.ContractTerminationBehavior, behaviors.ContractCompleteBehavior, behaviors.ContractStatusBehavior, behaviors.ContractSettleBehavior, behaviors.ContractValidationBehavior, behaviors.ContractSignBehavior},
+		[]ucan.Capability{
+			behaviors.ContractEventsBehavior,
+			behaviors.ContractTerminationBehavior,
+			behaviors.ContractCompleteBehavior,
+			behaviors.ContractStatusBehavior,
+			behaviors.ContractSettleBehavior,
+			behaviors.ContractValidationBehavior,
+			behaviors.ContractSignBehavior,
+			behaviors.ContractPaymentValidateBehavior,
+		},
 		contractActorCapsLifespan,
 	)
 	if err != nil {
@@ -248,7 +257,16 @@ func (c *ContractActor) SetupParticipantsCapabilities(participants contracts.Con
 	err = c.Security().Grant(
 		participants.Requestor,
 		c.ContractDID,
-		[]ucan.Capability{behaviors.ContractEventsBehavior, behaviors.ContractTerminationBehavior, behaviors.ContractCompleteBehavior, behaviors.ContractStatusBehavior, behaviors.ContractSettleBehavior, behaviors.ContractValidationBehavior, behaviors.ContractSignBehavior},
+		[]ucan.Capability{
+			behaviors.ContractEventsBehavior,
+			behaviors.ContractTerminationBehavior,
+			behaviors.ContractCompleteBehavior,
+			behaviors.ContractStatusBehavior,
+			behaviors.ContractSettleBehavior,
+			behaviors.ContractValidationBehavior,
+			behaviors.ContractSignBehavior,
+			behaviors.ContractPaymentValidateBehavior,
+		},
 		contractActorCapsLifespan,
 	)
 	if err != nil {
@@ -307,20 +325,37 @@ func (c *ContractActor) handleContractEvents(msg actor.Envelope) {
 		return
 	}
 
-	// Extract event type for efficient indexing (optional - AddUsageEvent will extract if not provided)
+	// Extract event type, provider DID, and Head Contract DID
 	var eventType events.EventType
+	var providerDID string
+	var headContractDID string
 	var eventMap map[string]interface{}
 	if err := json.Unmarshal(req.Payload, &eventMap); err == nil {
 		if typeStr, ok := eventMap["type"].(string); ok {
 			eventType = events.EventType(typeStr)
 		}
+		// Extract provider DID from event payload if available
+		if provDID, ok := eventMap["provider_did"].(string); ok {
+			providerDID = provDID
+		}
+		// Extract Head Contract DID from event payload if available
+		if hcDid, ok := eventMap["head_contract_did"].(string); ok {
+			headContractDID = hcDid
+		}
 	}
 
-	// Store with event_type (will be extracted from JSON if not provided)
+	// If not in payload, use message sender (for backwards compatibility)
+	if providerDID == "" {
+		providerDID = msg.From.DID.String()
+	}
+
+	// Store with event_type, provider_did, and head_contract_did
 	err := c.usageStore.AddUsageEvent(usage.Usage{
-		ContractDID: c.ContractDID.URI,
-		EventType:   eventType, // Optional - extracted from JSON if empty
-		Data:        req.Payload,
+		ContractDID:     c.ContractDID.URI, // Tail Contract DID (this contract)
+		HeadContractDID: headContractDID,   // Head Contract DID (if part of chain)
+		ProviderDID:     providerDID,
+		EventType:       eventType, // Optional - extracted from JSON if empty
+		Data:            req.Payload,
 	})
 	if err != nil {
 		resp.Error = err.Error()
@@ -635,6 +670,16 @@ func (c *ContractActor) checkAndGenerateInvoice() bool {
 			"contract_did", c.ContractDID.URI,
 			"error", err)
 		return false // Continue checking (might be transient error)
+	}
+
+	// Skip all billing if explicitly disabled (Contract A)
+	// Organization contracts (Contract A) will be billed manually by the organization
+	// outside the contract system
+	if contract.DisableBilling {
+		log.Debugw("skipping billing (disabled by contract flag)",
+			"labels", string(observability.LabelContract),
+			"contract_did", c.ContractDID.URI)
+		return true // Stop billing routine
 	}
 
 	// Get processor for this payment model
@@ -1069,8 +1114,10 @@ func (c *ContractActor) sendPeriodicInvoice(
 		// which is set correctly based on whether deployment stopped during the period
 		periodEnd := periodicUsage.PeriodEnd
 
-		// Create unique ID for this deployment's invoice
-		uniqueID := fmt.Sprintf("%s-periodic-%s-%d", contract.ContractDID, deployment.DeploymentID, now.Unix())
+		// Generate unique ID for this deployment's invoice
+		// Note: UUID will be generated in PeriodicProcessor.CalculatePayment,
+		// this is just for the request identifier
+		uniqueID := uuid.NewString()
 
 		// Create PeriodicUsage for this single deployment
 		deploymentPeriodicUsage := &contracts.PeriodicUsage{

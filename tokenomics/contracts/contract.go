@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
@@ -22,6 +23,7 @@ import (
 )
 
 type CreateContractRequest struct {
+	Metadata              map[string]string    `json:"metadata"`
 	SolutionEnablerDID    did.DID              `json:"solution_enabler_did"`
 	PaymentValidatorDID   did.DID              `json:"payment_validator_did"`
 	ResourceConfiguration types.Resources      `json:"resource_configuration"`
@@ -31,6 +33,7 @@ type CreateContractRequest struct {
 	ContractTerms         interface{}          `json:"contract_terms"`
 	ContractParticipants  ContractParticipants `json:"contract_participants"`
 	Duration              DurationDetails      `json:"duration"`
+	DisableBilling        bool                 `json:"disable_billing,omitempty"` // If true, disables all billing (automatic and manual)
 }
 
 type ContractPaymentStatusRequest struct {
@@ -143,6 +146,7 @@ type ContractConfirmLocalTransactionRequest struct {
 	UniqueID   string `json:"unique_id"`
 	TxHash     string `json:"tx_hash"`
 	Blockchain string `json:"blockchain"`
+	QuoteID    string `json:"quote_id,omitempty"` // Optional: quote ID for price conversion
 }
 
 type ContractConfirmLocalTransactionResponse struct {
@@ -154,9 +158,15 @@ type TransactionForServiceProviderRequest struct {
 	PaymentValidatorDID string                     `json:"payment_validator_did"`
 	ContractDID         string                     `json:"contract_did"`
 	ToAddress           []types.PaymentAddressInfo `json:"to_address"`
-	Amount              string                     `json:"amount"`
+	Metadata            map[string]interface{}     `json:"metadata,omitempty"`
+	Amount              string                     `json:"amount"`            // Original amount (in pricing currency if conversion needed)
 	Status              string                     `json:"status,omitempty"`  // optional status, defaults to "unpaid" if empty
 	TxHash              string                     `json:"tx_hash,omitempty"` // optional transaction hash
+
+	// New fields for price conversion tracking (NO conversion happens here)
+	OriginalAmount     string `json:"original_amount,omitempty"`     // Amount in pricing currency (USDT)
+	PricingCurrency    string `json:"pricing_currency,omitempty"`    // Currency of original amount (e.g., "USDT")
+	RequiresConversion bool   `json:"requires_conversion,omitempty"` // True if conversion is needed
 }
 
 type TransactionForServiceProviderResponse struct {
@@ -189,10 +199,56 @@ type ContractPaymentValidationRequest struct {
 	TxHash     string `json:"tx_hash"`
 	UniqueID   string `json:"unique_id"`
 	Blockchain string `json:"blockchain"`
+	QuoteID    string `json:"quote_id,omitempty"` // Optional: quote ID for price conversion
 }
 
 type ContractPaymentValidationResponse struct {
 	Error string `json:"error"`
+}
+
+// ContractGetPaymentQuoteRequest requests a payment quote for a transaction
+type ContractGetPaymentQuoteRequest struct {
+	UniqueID string `json:"unique_id"` // Transaction unique_id
+}
+
+// ContractGetPaymentQuoteResponse returns a payment quote
+type ContractGetPaymentQuoteResponse struct {
+	QuoteID         string    `json:"quote_id,omitempty"`         // Unique quote identifier
+	OriginalAmount  string    `json:"original_amount,omitempty"`  // Amount in pricing currency (USDT)
+	ConvertedAmount string    `json:"converted_amount,omitempty"` // Amount in payment currency (NTX)
+	PricingCurrency string    `json:"pricing_currency,omitempty"` // Original currency (e.g., "USDT")
+	PaymentCurrency string    `json:"payment_currency,omitempty"` // Payment currency (e.g., "NTX")
+	ExchangeRate    string    `json:"exchange_rate,omitempty"`    // Exchange rate used
+	ExpiresAt       time.Time `json:"expires_at,omitempty"`       // Quote expiration timestamp
+	Error           string    `json:"error,omitempty"`
+}
+
+// ContractValidatePaymentQuoteRequest validates a payment quote before payment
+type ContractValidatePaymentQuoteRequest struct {
+	QuoteID string `json:"quote_id"` // Quote to validate
+}
+
+// ContractValidatePaymentQuoteResponse returns validation result
+type ContractValidatePaymentQuoteResponse struct {
+	Valid           bool      `json:"valid"`                      // Whether quote is valid
+	QuoteID         string    `json:"quote_id,omitempty"`         // Quote identifier
+	OriginalAmount  string    `json:"original_amount,omitempty"`  // Amount in pricing currency
+	ConvertedAmount string    `json:"converted_amount,omitempty"` // Amount in payment currency
+	PricingCurrency string    `json:"pricing_currency,omitempty"` // Original currency
+	PaymentCurrency string    `json:"payment_currency,omitempty"` // Payment currency
+	ExchangeRate    string    `json:"exchange_rate,omitempty"`    // Exchange rate used
+	ExpiresAt       time.Time `json:"expires_at,omitempty"`       // Quote expiration timestamp
+	Error           string    `json:"error,omitempty"`            // Error if invalid
+}
+
+// ContractCancelPaymentQuoteRequest cancels/invalidates a payment quote
+type ContractCancelPaymentQuoteRequest struct {
+	QuoteID string `json:"quote_id"` // Quote to cancel
+}
+
+// ContractCancelPaymentQuoteResponse returns cancellation result
+type ContractCancelPaymentQuoteResponse struct {
+	Error string `json:"error,omitempty"`
 }
 
 type PaymentValidateRequest struct {
@@ -249,6 +305,11 @@ type CreateContractResponse struct {
 	Error           string                `json:"error"`
 }
 
+type ProposeContractRequest struct {
+	Contract          Contract     `json:"contract"`
+	CreatorOfContract actor.Handle `json:"creator_of_contract"`
+}
+
 type ProposeContractResponse struct {
 	Signature Signature `json:"signature"`
 	Error     string    `json:"error"`
@@ -282,6 +343,24 @@ type ContractValidateResponse struct {
 	Valid         bool   `json:"valid"`
 	CurrentStatus string `json:"current_status"`
 	Error         string `json:"error"`
+}
+
+// ContractChainVerificationRequest requests verification of a contract chain
+type ContractChainVerificationRequest struct {
+	SolutionEnablerDID string `json:"solution_enabler_did"` // Contract host DID
+	ContractDID        string `json:"contract_did"`         // Contract DID (Orch ↔ Org)
+	OrganizationDID    string `json:"organization_did"`     // Organization DID (from Contract A)
+	OrchestratorDID    string `json:"orchestrator_did"`     // Orchestrator DID
+	ProviderDID        string `json:"provider_did"`         // Provider DID
+}
+
+// ContractChainVerificationResponse contains the chain verification result
+type ContractChainVerificationResponse struct {
+	Valid                bool      `json:"valid"`
+	OrganizationDID      string    `json:"organization_did,omitempty"`
+	OrchestratorContract *Contract `json:"orchestrator_contract,omitempty"` // Contract A
+	ProviderContract     *Contract `json:"provider_contract,omitempty"`     // Contract B
+	Error                string    `json:"error,omitempty"`
 }
 
 type ContractSignRequest struct {
@@ -340,6 +419,13 @@ type ContractStateTransition struct {
 	ToState   ContractState
 }
 
+// Contract chain role constants for metadata
+const (
+	ContractChainRoleMetadataKey = "contract_chain_role"
+	ContractChainRoleHead        = "head"
+	ContractChainRoleTail        = "tail"
+)
+
 // StateTransition represents a historical state change
 type StateTransition struct {
 	FromState   ContractState `json:"from_state"`
@@ -369,6 +455,8 @@ type Contract struct {
 	ContractTerms         interface{}          `json:"contract_terms"` // To store contract agreement terms
 	TerminationStarted    time.Time            `json:"termination_started"`
 	Transitions           []StateTransition    `json:"transitions"`
+	DisableBilling        bool                 `json:"disable_billing,omitempty"` // If true, disables all billing (automatic and manual)
+	Metadata              map[string]string    `json:"metadata,omitempty"`        // Contract metadata (e.g., contract_chain_role)
 }
 
 func (c *Contract) Sign(key did.Provider) ([]byte, error) {
@@ -411,6 +499,69 @@ type Signature struct {
 	Signatures []byte  `json:"signature"` // The actual signature bytes
 }
 
+// Validate validates the CreateContractRequest and returns an error if any required fields are missing or invalid
+func (req *CreateContractRequest) Validate() error {
+	// Validate SolutionEnablerDID
+	if req.SolutionEnablerDID.Empty() {
+		return fmt.Errorf("solution_enabler_did is required")
+	}
+
+	// Validate PaymentValidatorDID
+	if req.PaymentValidatorDID.Empty() {
+		return fmt.Errorf("payment_validator_did is required")
+	}
+
+	// Validate ContractParticipants
+	if req.ContractParticipants.Provider.Empty() {
+		return fmt.Errorf("contract_participants.provider is required")
+	}
+	if req.ContractParticipants.Requestor.Empty() {
+		return fmt.Errorf("contract_participants.requestor is required")
+	}
+
+	// Validate PaymentDetails
+	if req.PaymentDetails.PaymentModel == "" {
+		return fmt.Errorf("payment_details.payment_model is required")
+	}
+
+	// Validate Duration
+	if req.Duration.StartDate.IsZero() {
+		return fmt.Errorf("duration.start_date is required")
+	}
+	if req.Duration.EndDate.IsZero() {
+		return fmt.Errorf("duration.end_date is required")
+	}
+	if !req.Duration.EndDate.After(req.Duration.StartDate) {
+		return fmt.Errorf("duration.end_date must be after duration.start_date")
+	}
+
+	// Validate payment_period and payment_period_count for models that require them
+	if req.PaymentDetails.PaymentModel == FixedRental || req.PaymentDetails.PaymentModel == Periodic {
+		// Validate payment_period is required and valid
+		if req.PaymentDetails.PaymentPeriod == "" {
+			return fmt.Errorf("payment_details.payment_period is required for payment model %s", req.PaymentDetails.PaymentModel)
+		}
+		// Validate payment_period is one of the valid values
+		validPeriods := map[string]bool{
+			PaymentPeriodMinute: true,
+			PaymentPeriodHour:   true,
+			PaymentPeriodDay:    true,
+			PaymentPeriodWeek:   true,
+			PaymentPeriodMonth:  true,
+		}
+		if !validPeriods[req.PaymentDetails.PaymentPeriod] {
+			return fmt.Errorf("payment_details.payment_period must be one of: minute, hour, day, week, month, got: %s", req.PaymentDetails.PaymentPeriod)
+		}
+
+		// Validate payment_period_count is positive
+		if req.PaymentDetails.PaymentPeriodCount <= 0 {
+			return fmt.Errorf("payment_details.payment_period_count must be a positive integer for payment model %s, got: %d", req.PaymentDetails.PaymentModel, req.PaymentDetails.PaymentPeriodCount)
+		}
+	}
+
+	return nil
+}
+
 func GenerateContractID(req CreateContractRequest) (string, error) {
 	data, err := json.Marshal(req)
 	if err != nil {
@@ -436,6 +587,14 @@ func NewContract(contractDID string, req CreateContractRequest) *Contract {
 	// Set periodicity defaults if not provided
 	SetPeriodicityDefaults(&req.PaymentDetails)
 
+	// Copy metadata from request if provided
+	metadata := make(map[string]string)
+	if req.Metadata != nil {
+		for k, v := range req.Metadata {
+			metadata[k] = v
+		}
+	}
+
 	return &Contract{
 		ContractDID:           contractDID,
 		SolutionEnablerDID:    req.SolutionEnablerDID,
@@ -449,5 +608,7 @@ func NewContract(contractDID string, req CreateContractRequest) *Contract {
 		ContractTerms:         req.ContractTerms,
 		CurrentState:          ContractDraft,
 		Transitions:           []StateTransition{},
+		DisableBilling:        req.DisableBilling,
+		Metadata:              metadata,
 	}
 }

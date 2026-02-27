@@ -25,6 +25,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
 	gatewastore "gitlab.com/nunet/device-management-service/gateway/store"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
@@ -47,8 +49,10 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts/processors"
 	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
+	"gitlab.com/nunet/device-management-service/tokenomics/pricing"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
+	payment_quote "gitlab.com/nunet/device-management-service/tokenomics/store/payment_quote"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/types"
@@ -163,6 +167,10 @@ type Node struct {
 	// payment processor
 	paymentProcessor PaymentProcessor
 	gatewayStore     *gatewastore.Store
+
+	// payment quote store and price converter
+	paymentQuoteStore *payment_quote.Store
+	priceConverter    *pricing.PriceConverter
 }
 
 // createActor creates an actor.
@@ -207,6 +215,7 @@ func New(cfg config.Config, fs afero.Afero,
 	deploymentStore orchestrator.DeploymentStore,
 	providerRegistry *provider.Registry,
 	gatewayStore *gatewastore.Store,
+	paymentQuoteStore *payment_quote.Store,
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -274,7 +283,7 @@ func New(cfg config.Config, fs afero.Afero,
 		return nil, fmt.Errorf("create node actor: %w", err)
 	}
 
-	allocator := newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID)
+	allocator := newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID, contractStore)
 	ctx, cancel := context.WithCancel(context.Background())
 	n := &Node{
 		allocator:              allocator,
@@ -338,7 +347,34 @@ func New(cfg config.Config, fs afero.Afero,
 		}
 	}
 
+	// Initialize price oracle and converter
+	var priceConverter *pricing.PriceConverter
+	if cfg.CoinMarketCap.APIKey != "" {
+		// Parse cache TTL (default to 5m if empty/invalid)
+		cacheTTL := 5 * time.Minute
+		if cfg.CoinMarketCap.CacheTTL != "" {
+			if parsedTTL, err := time.ParseDuration(cfg.CoinMarketCap.CacheTTL); err == nil {
+				cacheTTL = parsedTTL
+			}
+		}
+
+		// Set defaults for baseURL and endpointPath if empty
+		baseURL := cfg.CoinMarketCap.BaseURL
+		if baseURL == "" {
+			baseURL = "https://pro-api.coinmarketcap.com/v1"
+		}
+		endpointPath := cfg.CoinMarketCap.EndpointPath
+		if endpointPath == "" {
+			endpointPath = "/tools/price-conversion"
+		}
+
+		oracle := pricing.NewCoinMarketCapOracle(cfg.CoinMarketCap.APIKey, baseURL, endpointPath, cacheTTL)
+		priceConverter = pricing.NewPriceConverter(oracle)
+	}
+
 	n.paymentProcessor = NewPaymentProcessor(paymentStore, net, nodeActor.Handle(), invokeBehaviourFunc)
+	n.paymentQuoteStore = paymentQuoteStore
+	n.priceConverter = priceConverter
 
 	// set up the flight recorder
 	observability.FlightrecInit()
@@ -560,6 +596,9 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.DeploymentManifestBehavior: {
 			fn: n.handleDeploymentManifest,
 		},
+		behaviors.DeploymentInfoBehavior: {
+			fn: n.handleDeploymentInfo,
+		},
 		behaviors.DeploymentShutdownBehavior: {
 			fn: n.handleDeploymentShutdown,
 		},
@@ -689,9 +728,23 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.ContractListLocalTransactionsBehavior: {
 			fn: n.handleListLocalTransactions,
 		},
-
+		behaviors.ContractChainVerificationBehavior: {
+			fn: n.handleContractChainVerification,
+		},
+		behaviors.ContractInfoBehavior: {
+			fn: n.handleContractInfo,
+		},
 		behaviors.ContractConfirmLocalTransactionBehavior: {
 			fn: n.handleConfirmLocalTransaction,
+		},
+		behaviors.ContractGetPaymentQuoteBehavior: {
+			fn: n.handleGetPaymentQuote,
+		},
+		behaviors.ContractValidatePaymentQuoteBehavior: {
+			fn: n.handleValidatePaymentQuote,
+		},
+		behaviors.ContractCancelPaymentQuoteBehavior: {
+			fn: n.handleCancelPaymentQuote,
 		},
 
 		// gateway
@@ -877,6 +930,32 @@ func (n *Node) geolocate() {
 		"country", location.Country,
 		"city", location.City,
 	)
+
+	// periodic emitMetric
+	emitMetric := func() {
+		if m := observability.NodeLocation; m != nil {
+			m.Record(n.ctx, 1, metric.WithAttributes(
+				observability.AttrDID,
+				attribute.String("continent", location.Continent),
+				attribute.String("country", location.Country),
+				attribute.String("city", location.City),
+				attribute.Bool("onboarded", n.onboarding.IsOnboarded()),
+			))
+		}
+	}
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				emitMetric()
+			case <-n.ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
 // Start node
@@ -1202,6 +1281,36 @@ func (n *Node) executeBillingForContract(contractDID did.DID) error {
 	return nil
 }
 
+// contractType determines the type of contract for billing purposes
+type contractType int
+
+const (
+	contractTypeP2P          contractType = iota // Normal P2P contract (not part of chain)
+	contractTypeHeadContract                     // Head Contract in a chain
+	contractTypeTailContract                     // Tail Contract in a chain
+)
+
+// detectContractTypeForBilling determines contract type using metadata field
+// This works in both checkAndGenerateInvoice and collectUsagesAndForwardToPaymentProviders
+// without needing providerDID context
+// Uses metadata field for fast O(1) detection
+func (n *Node) detectContractTypeForBilling(contract *contracts.Contract) contractType {
+	// Check metadata field (O(1) lookup)
+	if contract.Metadata != nil {
+		if role, ok := contract.Metadata[contracts.ContractChainRoleMetadataKey]; ok {
+			switch role {
+			case contracts.ContractChainRoleHead:
+				return contractTypeHeadContract
+			case contracts.ContractChainRoleTail:
+				return contractTypeTailContract
+			}
+		}
+	}
+
+	// Default: P2P contract (no metadata set means it's not part of a chain)
+	return contractTypeP2P
+}
+
 func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUsagesAndForwardToPaymentProvidersRequest) contracts.CollectUsagesAndForwardToPaymentProvidersReponse {
 	resp := contracts.CollectUsagesAndForwardToPaymentProvidersReponse{
 		Results: make([]contracts.ContractUsageResult, 0),
@@ -1241,6 +1350,19 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 
 	// Collect usage for each contract based on its payment model
 	for _, contract := range contractsToProcess {
+		// Skip contracts with billing disabled (Contract A)
+		if contract.DisableBilling {
+			result := contracts.ContractUsageResult{
+				ContractDID:  contract.ContractDID,
+				PaymentModel: contract.PaymentDetails.PaymentModel,
+				Error:        "billing is disabled for this contract",
+			}
+			resp.Results = append(resp.Results, result)
+			log.Debugw("skipping manual billing (disabled by contract flag)",
+				"contract_did", contract.ContractDID)
+			continue
+		}
+
 		// Get contract-specific last processed timestamp
 		lastProcessedAt, _ := n.usageStore.GetLastProcessedAt(contract.ContractDID)
 
@@ -1269,8 +1391,39 @@ func (n *Node) collectUsagesAndForwardToPaymentProviders(req contracts.CollectUs
 			continue
 		}
 
-		// Collect usage using processor
-		usageData, err := processor.CollectUsage(contract.ContractDID, lastProcessedAt, now)
+		// Detect contract type using metadata field (no providerDID needed)
+		contractType := n.detectContractTypeForBilling(contract)
+
+		var usageData *contracts.UsageData
+		switch contractType {
+		case contractTypeHeadContract:
+			// Head Contract: query events by head_contract_did
+			usageData, err = processor.CollectUsage(
+				contract.ContractDID,
+				lastProcessedAt,
+				now,
+				"",                   // providerDID (empty for Head Contract - aggregate all)
+				contract.ContractDID, // headContractDID (query events where head_contract_did = this DID)
+			)
+		case contractTypeTailContract, contractTypeP2P:
+			// Tail Contract or P2P: query events by contract_did
+			usageData, err = processor.CollectUsage(
+				contract.ContractDID,
+				lastProcessedAt,
+				now,
+				"", // providerDID (can be specified for per-provider billing)
+				"", // headContractDID (empty - query by contract_did)
+			)
+		default:
+			// Fallback: treat as P2P
+			usageData, err = processor.CollectUsage(
+				contract.ContractDID,
+				lastProcessedAt,
+				now,
+				"",
+				"",
+			)
+		}
 		if err != nil {
 			result := contracts.ContractUsageResult{
 				ContractDID:  contract.ContractDID,

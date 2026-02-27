@@ -210,6 +210,9 @@ type ActorDeploymentBehaviorClient interface {
 	// DeploymentManifest retrieves the manifest of a deployment
 	DeploymentManifest(ctx context.Context, req node.DeploymentManifestRequest, opts ...Option) (node.DeploymentManifestResponse, error)
 
+	// DeploymentInfo retrieves comprehensive information about a deployment
+	DeploymentInfo(ctx context.Context, req node.DeploymentInfoRequest, opts ...Option) (node.DeploymentInfoResponse, error)
+
 	// DeploymentShutdown shuts down a deployment
 	DeploymentShutdown(ctx context.Context, req node.DeploymentShutdownRequest, opts ...Option) (node.DeploymentShutdownResponse, error)
 

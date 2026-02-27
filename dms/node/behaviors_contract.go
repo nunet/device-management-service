@@ -9,11 +9,13 @@
 package node
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,8 +30,11 @@ import (
 	ethereumClient "gitlab.com/nunet/device-management-service/tokenomics/client/ethereum"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
+	payment_quote "gitlab.com/nunet/device-management-service/tokenomics/store/payment_quote"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -88,6 +93,13 @@ func (n *Node) handleNewContract(msg actor.Envelope) {
 		handleErr(fmt.Errorf("unmarshal create contract request: %s", err))
 		return
 	}
+
+	// Validate required fields
+	if err := request.Validate(); err != nil {
+		handleErr(fmt.Errorf("invalid contract request: %w", err))
+		return
+	}
+
 	solutionEnablerDID = request.SolutionEnablerDID.String()
 
 	// Service provider path: forward to contract host, persist local copy, relay response.
@@ -101,8 +113,9 @@ func (n *Node) handleNewContract(msg actor.Envelope) {
 		return
 	}
 
+	creatorOfContract := msg.From
 	// Contract host path: existing behaviour
-	resp, err := n.createContractOnHost(request)
+	resp, err := n.createContractOnHost(request, creatorOfContract)
 	if err != nil {
 		handleErr(err)
 		return
@@ -111,10 +124,20 @@ func (n *Node) handleNewContract(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
-func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (contracts.CreateContractResponse, error) {
+func (n *Node) createContractOnHost(request contracts.CreateContractRequest, creatorOfContract actor.Handle) (contracts.CreateContractResponse, error) {
 	privKey, pubKey, err := crypto.GenerateKeyPair(crypto.Ed25519)
 	if err != nil {
 		return contracts.CreateContractResponse{}, fmt.Errorf("failed to generate contract keypair: %w", err)
+	}
+
+	// Validate payment details before creating contract
+	processor, err := contracts.GetPaymentModelProcessor(request.PaymentDetails.PaymentModel)
+	if err != nil {
+		return contracts.CreateContractResponse{}, fmt.Errorf("invalid payment model %q: %w", request.PaymentDetails.PaymentModel, err)
+	}
+
+	if err := processor.Validate(request.PaymentDetails); err != nil {
+		return contracts.CreateContractResponse{}, fmt.Errorf("invalid payment details: %w", err)
 	}
 
 	// Create forwardInvoice function to forward invoices from contract actor to payment validator
@@ -137,6 +160,18 @@ func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (co
 	}
 
 	contractObj := contracts.NewContract(contractActor.ContractDID.URI, request)
+
+	// Determine if this is a Head Contract in a chain and set metadata
+	// Head Contract: Provider = Organization (not a compute provider)
+	// This can be detected from ContractParticipants structure or explicit flag
+	// For now, we'll use a helper function that can be enhanced based on actual use cases
+	if isHeadContractFromRequest(request) {
+		if contractObj.Metadata == nil {
+			contractObj.Metadata = make(map[string]string)
+		}
+		contractObj.Metadata[contracts.ContractChainRoleMetadataKey] = contracts.ContractChainRoleHead
+	}
+
 	if err := n.contractStore.Upsert(contractObj); err != nil {
 		return contracts.CreateContractResponse{}, fmt.Errorf("failed to save contract: %w", err)
 	}
@@ -183,9 +218,15 @@ func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (co
 	// Store actor reference in map for O(1) lookup
 	n.addContractActor(contractActor)
 
-	go func() {
-		sigs, err := n.proposeContract(contractActor.ContractDID.URI)
-		if err == nil {
+	// if solution enabler, propose to parties
+	if request.SolutionEnablerDID.Equal(n.actor.Handle().DID) {
+		go func() {
+			sigs, err := n.proposeContract(contractActor.ContractDID.URI, creatorOfContract)
+			if err != nil {
+				log.Errorf("failed to propose contract: %w", err)
+				return
+			}
+
 			contractObj, err := n.contractStore.GetContract(contractActor.ContractDID.URI)
 			if err != nil {
 				log.Errorf("failed to get contract: %w", err)
@@ -207,8 +248,8 @@ func (n *Node) createContractOnHost(request contracts.CreateContractRequest) (co
 			if err := n.contractStore.Upsert(contractObj); err != nil {
 				log.Errorf("failed to update contract with signatures: %w", err)
 			}
-		}
-	}()
+		}()
+	}
 
 	return contracts.CreateContractResponse{
 		ContractRequest: request,
@@ -266,12 +307,13 @@ func (n *Node) handleContractPropose(msg actor.Envelope) {
 		n.sendReply(msg, contracts.ProposeContractResponse{Error: err.Error()})
 	}
 
-	var incomingContract contracts.Contract
-	if err := json.Unmarshal(msg.Message, &incomingContract); err != nil {
+	var request contracts.ProposeContractRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
 		handleErr(fmt.Errorf("failed to unmarshal contract: %s", err))
 		return
 	}
-	contractID = incomingContract.ContractDID
+	incomingContract := request.Contract
+	contractID = request.Contract.ContractDID
 
 	provider, err := n.rootCap.Trust().GetProvider(n.actor.Security().DID())
 	if err != nil {
@@ -279,17 +321,29 @@ func (n *Node) handleContractPropose(msg actor.Envelope) {
 		return
 	}
 
-	// if requester, no need explicit approval
-	if incomingContract.ContractParticipants.Requestor.URI == provider.DID().URI {
+	providerDID := provider.DID()
+	isCreator := request.CreatorOfContract.DID.Equal(providerDID)
+	isRequestor := providerDID.Equal(incomingContract.ContractParticipants.Requestor)
+	isProvider := providerDID.Equal(incomingContract.ContractParticipants.Provider)
+
+	// Auto-sign if creator and is a participant
+	if isCreator && (isRequestor || isProvider) {
+		log.Infof("automatically signing contract for creator/requestor: %s", providerDID.URI)
 		sig, err := incomingContract.Sign(provider)
 		if err != nil {
-			handleErr(fmt.Errorf("failed to sign contract: %w", err))
+			handleErr(fmt.Errorf("failed to sign proposed contract: %w", err))
+			return
+		}
+
+		err = n.contractStore.Upsert(&incomingContract)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to save proposed contract in the db: %w", err))
 			return
 		}
 
 		n.sendReply(msg, contracts.ProposeContractResponse{
 			Signature: contracts.Signature{
-				DID:        provider.DID(),
+				DID:        providerDID,
 				Signatures: sig,
 			},
 		})
@@ -333,7 +387,7 @@ func (n *Node) handleContractPropose(msg actor.Envelope) {
 	})
 }
 
-func (n *Node) proposeContract(contractDID string) ([]contracts.Signature, error) {
+func (n *Node) proposeContract(contractDID string, creatorOfContract actor.Handle) ([]contracts.Signature, error) {
 	contractObj, err := n.contractStore.GetContract(contractDID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find contract %s: %w", contractDID, err)
@@ -350,7 +404,10 @@ func (n *Node) proposeContract(contractDID string) ([]contracts.Signature, error
 	}
 
 	propose := func(handle actor.Handle) (*contracts.Signature, error) {
-		envelope, err := n.invokeBehaviour(handle, behaviors.ContractProposeBehavior, *contractObj, invokeMessageTimeout)
+		envelope, err := n.invokeBehaviour(handle, behaviors.ContractProposeBehavior, contracts.ProposeContractRequest{
+			Contract:          *contractObj,
+			CreatorOfContract: creatorOfContract,
+		}, invokeMessageTimeout)
 		if envelope.Message != nil && err == nil {
 			var response contracts.ProposeContractResponse
 			err := json.Unmarshal(envelope.Message, &response)
@@ -570,6 +627,50 @@ func (n *Node) handleListIncomingContracts(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
+// handleContractInfo handles requests for contract information
+// This is used by deployment handlers to retrieve Provider and Requestor DIDs
+// from the contract host when they're not specified in the ensemble
+func (n *Node) handleContractInfo(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorw("handle_contract_info",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err)
+		n.sendReply(msg, behaviors.ContractInfoResponse{
+			OK:    false,
+			Error: err.Error(),
+		})
+	}
+
+	var req behaviors.ContractInfoRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		handleErr(fmt.Errorf("failed to unmarshal contract info request: %w", err))
+		return
+	}
+
+	if req.ContractDID == "" {
+		handleErr(errors.New("contract_did is required"))
+		return
+	}
+
+	// Get contract from store
+	contract, err := n.contractStore.GetContract(req.ContractDID)
+	if err != nil {
+		handleErr(fmt.Errorf("contract not found: %w", err))
+		return
+	}
+
+	// Return Provider and Requestor DIDs
+	resp := behaviors.ContractInfoResponse{
+		OK:        true,
+		Provider:  contract.ContractParticipants.Provider.String(),
+		Requestor: contract.ContractParticipants.Requestor.String(),
+	}
+
+	n.sendReply(msg, resp)
+}
+
 func filterContractsByRole(contractsList []*contracts.Contract, role contracts.ContractListIncomingRole, targetDID string) []*contracts.Contract {
 	result := make([]*contracts.Contract, 0, len(contractsList))
 	for _, c := range contractsList {
@@ -694,6 +795,33 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 		handleErr(fmt.Errorf("failed to find payment with unique id: %s", req.UniqueID))
 		return
 	}
+
+	// Check if there's a quote for this transaction
+	var expectedAmount string
+	if req.QuoteID != "" {
+		// If quote_id is provided, get quote by ID
+		quote, err := n.paymentQuoteStore.GetQuote(req.QuoteID)
+		if err != nil {
+			handleErr(fmt.Errorf("failed to get quote: %w", err))
+			return
+		}
+		if quote.Used {
+			expectedAmount = quote.ConvertedAmount
+		} else {
+			// Fallback to payment amount if quote not found or not used
+			expectedAmount = payment.Amount
+		}
+	} else {
+		// Try to find used quote by unique_id
+		quote, err := n.paymentQuoteStore.GetQuoteByUniqueID(req.UniqueID)
+		if quote != nil && quote.Used {
+			expectedAmount = quote.ConvertedAmount
+		} else if err != nil { // meaning no quote was used
+			// Fallback to payment amount (for backward compatibility)
+			expectedAmount = payment.Amount
+		}
+	}
+
 	verified := false
 	errorMsg := ""
 	contractID = payment.Contract.ContractDID
@@ -726,7 +854,7 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 		}
 
 		// deduct some block numbers
-		blockNum -= 1800 // 5 hours back approx
+		blockNum -= 45000 // 5 days back approx
 		blockNumHex := fmt.Sprintf("0x%x", blockNum)
 
 		txs, err := ethereumClient.GetERC20Transfers(
@@ -748,14 +876,14 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 					return
 				}
 
-				ok, err := compareDecimals(tx.Amount, payment.Amount)
+				ok, err := compareDecimals(tx.Amount, expectedAmount)
 				if err != nil {
-					errorMsg = err.Error() + " tx amount: " + tx.Amount + " payment amount: " + payment.Amount
+					errorMsg = err.Error() + " tx amount: " + tx.Amount + " expected amount: " + expectedAmount
 				}
 				if ok {
 					verified = true
 				} else {
-					errorMsg = "not verified: tx amount: " + tx.Amount + " payment amount: " + payment.Amount
+					errorMsg = "not verified: tx amount: " + tx.Amount + " expected amount: " + expectedAmount
 				}
 
 				break
@@ -803,14 +931,14 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 					return
 				}
 
-				ok, err := compareDecimals(tx.Quantity, payment.Amount)
+				ok, err := compareDecimals(tx.Quantity, expectedAmount)
 				if err != nil {
-					errorMsg = err.Error() + " tx amount: " + tx.Quantity + " payment amount: " + payment.Amount
+					errorMsg = err.Error() + " tx amount: " + tx.Quantity + " expected amount: " + expectedAmount
 				}
 				if ok {
 					verified = true
 				} else {
-					errorMsg = "not verified: tx amount: " + tx.Quantity + " payment amount: " + payment.Amount
+					errorMsg = "not verified: tx amount: " + tx.Quantity + " expected amount: " + expectedAmount
 				}
 
 				break
@@ -864,10 +992,32 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 	}
 	contractID = paymentProviderDID
 
+	// If quote_id is provided, validate and mark as used
+	if req.QuoteID != "" {
+		// Validate quote is still valid (not expired, not used)
+		quote, err := n.paymentQuoteStore.ValidateQuote(req.QuoteID)
+		if err != nil {
+			handleErr(fmt.Errorf("quote validation failed: %w", err))
+			return
+		}
+
+		if quote.UniqueID != req.UniqueID {
+			handleErr(fmt.Errorf("quote does not match transaction"))
+			return
+		}
+
+		// Mark quote as used
+		if err := n.paymentQuoteStore.MarkQuoteAsUsed(req.QuoteID); err != nil {
+			handleErr(fmt.Errorf("failed to mark quote as used: %w", err))
+			return
+		}
+	}
+
 	paymentValidationReq := contracts.ContractPaymentValidationRequest{
 		TxHash:     req.TxHash,
 		UniqueID:   req.UniqueID,
 		Blockchain: req.Blockchain,
+		QuoteID:    req.QuoteID,
 	}
 	paymentProvider, err := actor.HandleFromDID(paymentProviderDID)
 	if err != nil {
@@ -914,6 +1064,7 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 		Amount:              tx.Amount,
 		Status:              "paid", // Mark as paid
 		TxHash:              req.TxHash,
+		Metadata:            tx.Metadata,
 	}
 
 	destination, err := actor.HandleFromDID(contract.ContractParticipants.Provider.URI)
@@ -931,6 +1082,30 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 	if err != nil {
 		handleErr(fmt.Errorf("failed to forward paid transaction to compute provider: %w", err))
 		return
+	}
+
+	// if the transaction is a orchestration fee, add it to the orchestration fee metric
+	if feeType, ok := tx.Metadata["fee_type"].(string); ok && feeType == "orchestration" {
+		if m := observability.TxPaidFeesAmount; m != nil {
+			amount, err := strconv.ParseFloat(tx.Amount, 64)
+			if err == nil {
+				m.Add(n.ctx, amount, metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("ContractDID", tx.ContractDID),
+				))
+			}
+		}
+	}
+
+	// metric
+	if m := observability.TxPaidAmount; m != nil {
+		amount, err := strconv.ParseFloat(tx.Amount, 64)
+		if err == nil {
+			m.Add(n.ctx, amount, metric.WithAttributes(
+				observability.AttrDID,
+				attribute.String("ContractDID", tx.ContractDID),
+			))
+		}
 	}
 
 	log.Infof("successfully forwarded paid transaction %s to compute provider", req.UniqueID)
@@ -1013,10 +1188,41 @@ func (n *Node) handleIncomingTransaction(msg actor.Envelope) {
 		Amount:              req.Amount,
 		Status:              req.Status, // Use provided status, or "" defaults to "unpaid" in Upsert
 		TxHash:              req.TxHash, // Use provided tx hash
+		Metadata:            req.Metadata,
+
+		// Store conversion metadata if provided
+		OriginalAmount:     req.OriginalAmount,     // Amount in pricing currency (USDT)
+		PricingCurrency:    req.PricingCurrency,    // Currency of original amount
+		RequiresConversion: req.RequiresConversion, // True if conversion is needed
 	})
 	if err != nil {
 		handleErr(fmt.Errorf("failed to insert transaction into the store: %w", err))
 		return
+	}
+
+	// if USDT, add to USD metric
+	if req.PricingCurrency == "USDT" {
+		// metric
+		if m := observability.TxCreatedUSDAmount; m != nil {
+			amount, err := strconv.ParseFloat(req.OriginalAmount, 64)
+			if err == nil {
+				m.Add(n.ctx, amount, metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("ContractDID", req.ContractDID),
+				))
+			}
+		}
+	}
+
+	// metric
+	if m := observability.TxCreatedAmount; m != nil {
+		amount, err := strconv.ParseFloat(req.Amount, 64)
+		if err == nil {
+			m.Add(n.ctx, amount, metric.WithAttributes(
+				observability.AttrDID,
+				attribute.String("ContractDID", req.ContractDID),
+			))
+		}
 	}
 
 	resp := contracts.TransactionForServiceProviderResponse{}
@@ -1079,6 +1285,107 @@ func (n *Node) handleIncomingContractUsage(msg actor.Envelope) {
 	}
 
 	resp := contracts.ContractUsageResponse{}
+	n.sendReply(msg, resp)
+}
+
+func (n *Node) handleContractChainVerification(msg actor.Envelope) {
+	defer msg.Discard()
+
+	resp := contracts.ContractChainVerificationResponse{}
+
+	var req contracts.ContractChainVerificationRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		resp.Error = fmt.Sprintf("failed to unmarshal request: %v", err)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Verify that the caller is the Provider mentioned in the request
+	// This ensures only the actual Provider can verify chains involving itself
+	providerDID, err := did.FromString(req.ProviderDID)
+	if err != nil {
+		resp.Error = fmt.Sprintf("invalid provider DID: %v", err)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Security check: Only the Provider mentioned in the request can verify the chain
+	if msg.From.DID != providerDID {
+		resp.Error = fmt.Sprintf("caller DID (%s) does not match ProviderDID in request (%s)",
+			msg.From.DID.String(), req.ProviderDID)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	orchestratorDID, err := did.FromString(req.OrchestratorDID)
+	if err != nil {
+		resp.Error = fmt.Sprintf("invalid orchestrator DID: %v", err)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Step 1: Verify Contract A (Orchestrator ↔ Organization)
+	// Use the provided ContractADID to get the contract
+	contractA, err := n.contractStore.GetContract(req.ContractDID)
+	if err != nil {
+		resp.Error = fmt.Sprintf("contract A not found: %v", err)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Validate Contract A participants match the provided DIDs
+	provStr := contractA.ContractParticipants.Provider.String()
+	reqStr := contractA.ContractParticipants.Requestor.String()
+	orchStr := orchestratorDID.String()
+
+	// Check that Contract A is between Orchestrator and Organization
+	if reqStr != orchStr && provStr == req.ProviderDID {
+		resp.Error = "contract A participants do not match orchestrator and organization"
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Ensure Contract A is active
+	if contractA.CurrentState != contracts.ContractAccepted && contractA.CurrentState != contracts.ContractActive {
+		resp.Error = fmt.Sprintf("contract A is not in active state: %s", contractA.CurrentState)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Step 2: Find Contract B (Organization ↔ Provider)
+	// The orchestrator specifies Contract A (head contract) which includes the Organization DID.
+	// The provider finds Contract B by matching the Organization DID from Contract A.
+	// This handles the case where a provider has contracts with multiple organizations:
+	// the provider will find the correct Contract B based on which organization is specified
+	// in the head contract (Contract A).
+	//
+	// Example: If Provider has contracts with Org1 and Org2:
+	// - Orchestrator specifies Contract A with Org1 → Provider finds Contract B with Org1
+	// - Orchestrator specifies Contract A with Org2 → Provider finds Contract B with Org2
+	contractB, err := n.contractStore.FindContractByParticipants(contractA.ContractParticipants.Provider, providerDID)
+	if err != nil {
+		resp.Error = fmt.Sprintf("no active contract found between organization and provider: %v", err)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Step 3: Validate both contracts are in acceptable state
+	validA := contractA.CurrentState == contracts.ContractAccepted || contractA.CurrentState == contracts.ContractActive
+	validB := contractB.CurrentState == contracts.ContractAccepted || contractB.CurrentState == contracts.ContractActive
+
+	if !validA || !validB {
+		resp.Error = fmt.Sprintf("contract chain invalid: Contract A state=%s, Contract B state=%s",
+			contractA.CurrentState, contractB.CurrentState)
+		n.sendReply(msg, resp)
+		return
+	}
+
+	// Chain is valid
+	resp.Valid = true
+	resp.OrganizationDID = contractA.ContractParticipants.Provider.String()
+	resp.OrchestratorContract = contractA
+	resp.ProviderContract = contractB
+
 	n.sendReply(msg, resp)
 }
 
@@ -1154,6 +1461,13 @@ func (n *Node) convertRequestToUsageData(req *contracts.ContractUsageRequest) (*
 	}
 }
 
+// isHeadContractFromRequest determines if a contract is a Head Contract in a chain
+// This can be enhanced based on actual contract creation context
+// For now, returns false (contracts without metadata are treated as P2P)
+func isHeadContractFromRequest(request contracts.CreateContractRequest) bool {
+	return request.Metadata[contracts.ContractChainRoleMetadataKey] == contracts.ContractChainRoleHead
+}
+
 // true if a is bigger than b
 func compareDecimals(a, b string) (bool, error) {
 	af, _, err := big.ParseFloat(a, 10, 256, big.ToNearestEven)
@@ -1165,4 +1479,197 @@ func compareDecimals(a, b string) (bool, error) {
 		return false, err
 	}
 	return af.Cmp(bf) >= 0, nil
+}
+
+// handleGetPaymentQuote handles requests for payment quotes
+func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorw("handle_get_payment_quote",
+			"labels", []string{string(observability.LabelContract)},
+			"error", err)
+		n.sendReply(msg, contracts.ContractGetPaymentQuoteResponse{Error: err.Error()})
+	}
+
+	var req contracts.ContractGetPaymentQuoteRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		handleErr(fmt.Errorf("failed to unmarshal payment quote request: %w", err))
+		return
+	}
+
+	// Get transaction
+	tx, err := n.transactionStore.GetTransactionByUniqueID(req.UniqueID)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get transaction: %w", err))
+		return
+	}
+
+	// Check if conversion is needed
+	if !tx.RequiresConversion || tx.PricingCurrency == "" {
+		handleErr(fmt.Errorf("transaction does not require conversion"))
+		return
+	}
+
+	// Check if there's already an active quote for this transaction
+	existingQuote, err := n.paymentQuoteStore.HasActiveQuote(req.UniqueID)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to check for existing quote: %w", err))
+		return
+	}
+	if existingQuote != nil {
+		handleErr(fmt.Errorf("active quote already exists for this transaction (quote_id: %s). Please cancel the existing quote before creating a new one", existingQuote.QuoteID))
+		return
+	}
+
+	// Get payment currency from transaction addresses
+	paymentCurrency := "NTX"
+	if len(tx.ToAddress) > 0 {
+		paymentCurrency = tx.ToAddress[0].Currency
+	}
+
+	// Perform real-time conversion
+	if n.priceConverter == nil {
+		handleErr(fmt.Errorf("price converter not configured"))
+		return
+	}
+
+	ctx := context.Background()
+	oracle := n.priceConverter.GetOracle()
+	if oracle == nil {
+		handleErr(fmt.Errorf("price oracle not available"))
+		return
+	}
+
+	convertedAmount, err := oracle.ConvertAmount(ctx, tx.OriginalAmount, tx.PricingCurrency, paymentCurrency)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to convert amount: %w", err))
+		return
+	}
+
+	// Get exchange rate
+	rate, err := oracle.GetPrice(ctx, tx.PricingCurrency, paymentCurrency)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get exchange rate: %w", err))
+		return
+	}
+
+	// Generate quote ID
+	quoteID := fmt.Sprintf("quote_%s_%d", req.UniqueID, time.Now().UnixNano())
+
+	// Get quote TTL from config (default: 2 minutes)
+	quoteTTL := 2 * time.Minute
+	if n.dmsConfig.CoinMarketCap.QuoteTTL != "" {
+		if parsedTTL, err := time.ParseDuration(n.dmsConfig.CoinMarketCap.QuoteTTL); err == nil {
+			quoteTTL = parsedTTL
+		}
+	}
+
+	// Create quote
+	quote := payment_quote.PaymentQuote{
+		QuoteID:         quoteID,
+		UniqueID:        req.UniqueID,
+		OriginalAmount:  tx.OriginalAmount,
+		ConvertedAmount: convertedAmount,
+		PricingCurrency: tx.PricingCurrency,
+		PaymentCurrency: paymentCurrency,
+		ExchangeRate:    fmt.Sprintf("%.8f", rate),
+		CreatedAt:       time.Now(),
+		ExpiresAt:       time.Now().Add(quoteTTL),
+		Used:            false,
+	}
+
+	// Store quote
+	if err := n.paymentQuoteStore.CreateQuote(quote); err != nil {
+		handleErr(fmt.Errorf("failed to create quote: %w", err))
+		return
+	}
+
+	// Return response
+	resp := contracts.ContractGetPaymentQuoteResponse{
+		QuoteID:         quoteID,
+		OriginalAmount:  tx.OriginalAmount,
+		ConvertedAmount: convertedAmount,
+		PricingCurrency: tx.PricingCurrency,
+		PaymentCurrency: paymentCurrency,
+		ExchangeRate:    fmt.Sprintf("%.8f", rate),
+		ExpiresAt:       quote.ExpiresAt,
+	}
+
+	n.sendReply(msg, resp)
+}
+
+// handleValidatePaymentQuote handles validation requests for payment quotes
+func (n *Node) handleValidatePaymentQuote(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		n.sendReply(msg, contracts.ContractValidatePaymentQuoteResponse{
+			Valid: false,
+			Error: err.Error(),
+		})
+	}
+
+	var req contracts.ContractValidatePaymentQuoteRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		handleErr(fmt.Errorf("failed to unmarshal validate quote request: %w", err))
+		return
+	}
+
+	// Validate quote (checks expiration and usage)
+	quote, err := n.paymentQuoteStore.ValidateQuote(req.QuoteID)
+	if err != nil {
+		handleErr(fmt.Errorf("quote validation failed: %w", err))
+		return
+	}
+
+	// Return validation result with quote details
+	resp := contracts.ContractValidatePaymentQuoteResponse{
+		Valid:           true,
+		QuoteID:         quote.QuoteID,
+		OriginalAmount:  quote.OriginalAmount,
+		ConvertedAmount: quote.ConvertedAmount,
+		PricingCurrency: quote.PricingCurrency,
+		PaymentCurrency: quote.PaymentCurrency,
+		ExchangeRate:    quote.ExchangeRate,
+		ExpiresAt:       quote.ExpiresAt,
+	}
+
+	n.sendReply(msg, resp)
+}
+
+// handleCancelPaymentQuote handles cancellation requests for payment quotes
+func (n *Node) handleCancelPaymentQuote(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		n.sendReply(msg, contracts.ContractCancelPaymentQuoteResponse{Error: err.Error()})
+	}
+
+	var req contracts.ContractCancelPaymentQuoteRequest
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		handleErr(fmt.Errorf("failed to unmarshal cancel quote request: %w", err))
+		return
+	}
+
+	// Validate quote exists
+	quote, err := n.paymentQuoteStore.GetQuote(req.QuoteID)
+	if err != nil {
+		handleErr(fmt.Errorf("quote not found: %w", err))
+		return
+	}
+
+	// Check if already used
+	if quote.Used {
+		handleErr(fmt.Errorf("quote already used"))
+		return
+	}
+
+	// Invalidate quote (mark as used)
+	if err := n.paymentQuoteStore.InvalidateQuote(req.QuoteID); err != nil {
+		handleErr(fmt.Errorf("failed to invalidate quote: %w", err))
+		return
+	}
+
+	n.sendReply(msg, contracts.ContractCancelPaymentQuoteResponse{})
 }

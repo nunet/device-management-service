@@ -25,6 +25,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/natefinch/lumberjack"
 	"github.com/olivere/elastic/v7"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -48,6 +49,7 @@ var (
 	atomicLevel      zap.AtomicLevel = zap.NewAtomicLevel()
 	log                              = logging.Logger("observability")
 	didID            did.DID
+	AttrDID          attribute.KeyValue
 )
 
 // CustomEvent represents a custom event structure
@@ -67,7 +69,7 @@ func isESDisabled() bool {
 	return atomic.LoadInt32(&esDisabledFlag) == 1
 }
 
-// Initialize sets up the logger, tracing, and event bus
+// Initialize sets up the logger, metrics, tracing, and event bus
 func Initialize(host host.Host, did did.DID, cfg *config.Config) error {
 	mutex.Lock()
 	ObservabilityCfg = cfg.Observability
@@ -79,6 +81,7 @@ func Initialize(host host.Host, did did.DID, cfg *config.Config) error {
 	}
 
 	didID = did
+	AttrDID = attribute.String("did", did.String())
 
 	// Initialize the event bus
 	if err := initEventBus(host); err != nil {
@@ -96,6 +99,10 @@ func Initialize(host host.Host, did did.DID, cfg *config.Config) error {
 		initTracing(ApmCfg)
 	} else {
 		log.Warn("APM Server URL not provided, tracing will be disabled")
+	}
+
+	if err := initMetrics(context.TODO()); err != nil {
+		log.Warn("Failed to initialize metrics", zap.Error(err))
 	}
 
 	return nil

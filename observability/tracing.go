@@ -124,9 +124,6 @@ func initTracing(apmConfig config.APM) {
 	tracingNoOpMode = false
 
 	initRootTrace(tracer)
-
-	// Register custom metrics
-	registerCustomMetrics(tracer)
 }
 
 func initRootTrace(tracer *apm.Tracer) {
@@ -192,61 +189,6 @@ func collectSystemMetrics() map[string]interface{} {
 	}
 
 	return metrics
-}
-
-func gatherMetricsFunc(_ context.Context, m *apm.Metrics) error {
-	// TODO not testable without interfaces
-	metrics := collectSystemMetrics()
-
-	// Use DID as hostname
-	didAsHostname := didID.String()
-	didLabel := []apm.MetricLabel{{Name: "hostdid", Value: didAsHostname}}
-
-	// CPU usage
-	if cpuUsage, ok := metrics["cpuUsage"].(float64); ok {
-		m.Add("system.cpu.total.norm.pct", didLabel, cpuUsage/100.0)
-	}
-
-	// RAM usage
-	if ramUsed, ok := metrics["ramUsed"].(uint64); ok {
-		m.Add("system.memory.actual.used.bytes", didLabel, float64(ramUsed))
-	}
-	if ramTotal, ok := metrics["ramTotal"].(uint64); ok {
-		m.Add("system.memory.total", didLabel, float64(ramTotal))
-	}
-
-	// Disk usage
-	if diskUsed, ok := metrics["diskUsed"].(uint64); ok {
-		m.Add("system.filesystem.used.bytes", didLabel, float64(diskUsed))
-	}
-	if diskTotal, ok := metrics["diskTotal"].(uint64); ok {
-		m.Add("system.filesystem.total", didLabel, float64(diskTotal))
-	}
-
-	// Uptime
-	if uptime, ok := metrics["uptime"].(float64); ok {
-		m.Add("system.uptime", didLabel, uptime)
-	}
-
-	// Load average
-	if load15, ok := metrics["load15"].(float64); ok {
-		m.Add("system.load.15", didLabel, load15)
-	}
-
-	// Network RX/TX
-	if rxBytes, ok := metrics["rxBytes"].(uint64); ok {
-		m.Add("system.network.in.bytes", didLabel, float64(rxBytes))
-	}
-	if txBytes, ok := metrics["txBytes"].(uint64); ok {
-		m.Add("system.network.out.bytes", didLabel, float64(txBytes))
-	}
-
-	return nil
-}
-
-func registerCustomMetrics(tracer *apm.Tracer) {
-	gatherer := apm.GatherMetricsFunc(gatherMetricsFunc)
-	tracer.RegisterMetricsGatherer(gatherer)
 }
 
 // StartSpan is a unified entry point to start instrumentation.

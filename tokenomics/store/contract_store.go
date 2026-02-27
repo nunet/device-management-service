@@ -17,7 +17,9 @@ import (
 	"github.com/ostafen/clover/v2"
 	"github.com/ostafen/clover/v2/document"
 	"github.com/ostafen/clover/v2/query"
+	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
@@ -162,4 +164,167 @@ func (s *Store) GetAllContracts() ([]*contracts.Contract, error) {
 	}
 
 	return allContracts, nil
+}
+
+// FindContractByParticipants finds a contract where both participants match
+// Returns the contract if exactly one active contract exists between the two parties
+func (s *Store) FindContractByParticipants(participant1, participant2 did.DID) (*contracts.Contract, error) {
+	q := query.NewQuery(contractsCollection)
+	docs, err := s.db.FindAll(q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve contracts: %w", err)
+	}
+
+	participant1Str := participant1.String()
+	participant2Str := participant2.String()
+
+	var matches []*contracts.Contract
+	for _, doc := range docs {
+		var contract contracts.Contract
+		data := doc.Get("contract_data")
+		contractData, ok := data.([]byte)
+		if !ok {
+			continue
+		}
+		if err := json.Unmarshal(contractData, &contract); err != nil {
+			continue
+		}
+
+		provStr := contract.ContractParticipants.Provider.String()
+		reqStr := contract.ContractParticipants.Requestor.String()
+
+		// Check if both participants match (order-independent)
+		matchesParticipant1 := (provStr == participant1Str || reqStr == participant1Str)
+		matchesParticipant2 := (provStr == participant2Str || reqStr == participant2Str)
+
+		if matchesParticipant1 && matchesParticipant2 {
+			// Only include active contracts (ACCEPTED or ACTIVE state)
+			if contract.CurrentState == contracts.ContractAccepted || contract.CurrentState == contracts.ContractActive {
+				matches = append(matches, &contract)
+			}
+		}
+	}
+
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("no active contract found between participants")
+	}
+
+	if len(matches) > 1 {
+		return nil, fmt.Errorf("multiple active contracts found between participants (violates single contract rule)")
+	}
+
+	return matches[0], nil
+}
+
+// FindContractsByParticipant finds contracts where the given DID is a participant
+func (s *Store) FindContractsByParticipant(participant did.DID) ([]*contracts.Contract, error) {
+	q := query.NewQuery(contractsCollection)
+	docs, err := s.db.FindAll(q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve contracts: %w", err)
+	}
+
+	participantStr := participant.String()
+	var matches []*contracts.Contract
+
+	for _, doc := range docs {
+		var contract contracts.Contract
+		data := doc.Get("contract_data")
+		contractData, ok := data.([]byte)
+		if !ok {
+			continue
+		}
+		if err := json.Unmarshal(contractData, &contract); err != nil {
+			continue
+		}
+
+		provStr := contract.ContractParticipants.Provider.String()
+		reqStr := contract.ContractParticipants.Requestor.String()
+
+		if provStr == participantStr || reqStr == participantStr {
+			// Only include active contracts
+			if contract.CurrentState == contracts.ContractAccepted || contract.CurrentState == contracts.ContractActive {
+				matches = append(matches, &contract)
+			}
+		}
+	}
+
+	return matches, nil
+}
+
+// FindTailContractConfig finds Tail Contracts and returns them as ContractConfig.
+// This method wraps FindTailContract to return ContractConfig format for use in jobs package.
+// Note: This method name matches the TailContractFinder interface from jobs package.
+func (s *Store) FindTailContract(
+	headContractConfig types.ContractConfig,
+	computeProviderDID string,
+) (*types.ContractConfig, error) {
+	tailContracts, err := s.findTailContracts(headContractConfig, computeProviderDID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(tailContracts) == 0 {
+		return nil, fmt.Errorf("no tail contracts found")
+	}
+
+	if len(tailContracts) > 1 {
+		return nil, fmt.Errorf("multiple tail contracts found")
+	}
+
+	return &types.ContractConfig{
+		DID:      tailContracts[0].ContractDID,
+		Host:     tailContracts[0].SolutionEnablerDID.String(),
+		Provider: tailContracts[0].ContractParticipants.Provider.String(),
+	}, nil
+}
+
+// findTailContracts is the internal method that returns []*contracts.Contract.
+// This is used by FindTailContract to avoid naming conflicts.
+func (s *Store) findTailContracts(
+	headContractConfig types.ContractConfig,
+	computeProviderDID string,
+) ([]*contracts.Contract, error) {
+	if headContractConfig.Provider == "" {
+		return nil, fmt.Errorf("head contract config is missing provider DID")
+	}
+
+	organizationDID, err := did.FromString(headContractConfig.Provider)
+	if err != nil {
+		return nil, fmt.Errorf("invalid organization DID in head contract config: %w", err)
+	}
+
+	computeProviderDIDObj, err := did.FromString(computeProviderDID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid compute provider DID: %w", err)
+	}
+
+	// Get all contracts
+	allContracts, err := s.GetAllContracts()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all contracts: %w", err)
+	}
+
+	var tailContracts []*contracts.Contract
+	for _, contract := range allContracts {
+		// Skip the head contract itself (if it exists locally)
+		if contract.ContractDID == headContractConfig.DID {
+			continue
+		}
+
+		// Check if this is a Tail Contract:
+		// 1. Requestor matches Organization (from Head Contract config's Provider)
+		// 2. Provider is the compute provider (this node)
+		// 3. Contract is active
+		requestorMatchesOrg := contract.ContractParticipants.Requestor.Equal(organizationDID)
+		providerIsComputeProvider := contract.ContractParticipants.Provider.Equal(computeProviderDIDObj)
+		isActive := contract.CurrentState == contracts.ContractAccepted ||
+			contract.CurrentState == contracts.ContractActive
+
+		if requestorMatchesOrg && providerIsComputeProvider && isActive {
+			tailContracts = append(tailContracts, contract)
+		}
+	}
+
+	return tailContracts, nil
 }

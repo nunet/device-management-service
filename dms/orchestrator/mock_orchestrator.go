@@ -188,6 +188,7 @@ func (m *MockOrchestrator) StatusChannel(_ context.Context) <-chan jtypes.Deploy
 func (m *MockOrchestrator) AllocationInfo() map[string]jtypes.AllocationInfo {
 	return make(map[string]jtypes.AllocationInfo)
 }
+func (m *MockOrchestrator) UpdateAllocationStatus() {}
 
 func (m *MockOrchestrator) Done() <-chan struct{} {
 	return nil

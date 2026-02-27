@@ -36,6 +36,19 @@ type ContractConfirmLocalTransactionCmd struct {
 	UniqueID   string
 	TxHash     string
 	Blockchain string
+	QuoteID    string
+}
+
+type ContractGetPaymentQuoteCmd struct {
+	UniqueID string
+}
+
+type ContractValidatePaymentQuoteCmd struct {
+	QuoteID string
+}
+
+type ContractCancelPaymentQuoteCmd struct {
+	QuoteID string
 }
 
 type ContractPaymentStatusCmd struct {

@@ -102,10 +102,10 @@ func (a *Allocation) handleAllocationStats(msg actor.Envelope) {
 		}
 	}
 
-	// zero resource usage if allocation not running
+	// Do not report usage when allocation is not running; return nil stats so deployment info does not add to usage.
 	if a.Status().Status != jobtypes.AllocationRunning {
-		resp.Stats = &types.ExecutorStats{}
 		resp.OK = true
+		resp.Stats = nil
 		a.sendReply(msg, resp)
 		return
 	}

@@ -54,7 +54,7 @@ func NewGPUManager() types.GPUManager {
 			"labels", string(observability.LabelNode),
 			"error", err)
 	}
-	_, err = newIntelGPUConnector()
+	intelConnector, err := newIntelGPUConnector()
 	if err != nil {
 		log.Debugw("could not create Intel GPU connector",
 			"labels", string(observability.LabelNode),
@@ -63,7 +63,7 @@ func NewGPUManager() types.GPUManager {
 	connector := gpuConnectors{
 		nvidia: nvidiaConnector,
 		amd:    amdConnector,
-		// intel:  intelConnector,
+		intel:  intelConnector,
 	}
 
 	return &gpuManager{

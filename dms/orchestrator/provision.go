@@ -24,6 +24,8 @@ import (
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const orchSubnetName = "orchestrator"
@@ -221,6 +223,19 @@ func (p *Provisioner) provisionAllocations(
 					log.Errorf("failed to generate manifest key for %s.%s: %v", nodeKey, allocName, err)
 					continue
 				}
+
+				statusMetric := func(status jtypes.AllocationStatus) {
+					// metric
+					if m := observability.AllocationStatus; m != nil {
+						m.Record(p.ctx, 1, metric.WithAttributes(
+							observability.AttrDID,
+							attribute.String("orchestratorID", manifest.ID),
+							attribute.String("allocationID", allocKey),
+							attribute.String("status", string(status)),
+						))
+					}
+				}
+
 				// TODO: this is a temporary hack, we need to find better ways to handle this
 				rawNodeAllocations := make([]string, 0)
 				for _, alloc := range nodeManifest.Allocations {
@@ -284,6 +299,7 @@ func (p *Provisioner) provisionAllocations(
 
 						if !response.OK {
 							allocStatuses[allocKey] = jtypes.AllocationFailed
+							statusMetric(jtypes.AllocationFailed)
 							errCh <- fmt.Errorf("error starting allocation: %s: %w", response.Error, ErrDeploymentFailed)
 							return
 						}
@@ -300,6 +316,7 @@ func (p *Provisioner) provisionAllocations(
 					}
 
 					allocStatuses[allocKey] = status
+					statusMetric(status)
 					log.Infow("allocation successfully started on peer",
 						"labels", []string{string(observability.LabelDeployment)},
 						"orchestratorID", manifest.ID,
@@ -320,6 +337,7 @@ func (p *Provisioner) provisionAllocations(
 				}
 			}
 
+			// TODO dup?
 			wg.Wait()
 
 			for allocName, status := range allocStatuses {

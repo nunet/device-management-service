@@ -251,11 +251,13 @@ type Libp2pConfig struct {
 
 - `network.libp2p.Advertisement`: `TBD`
 
+```
 type Advertisement struct {
 	PeerID    string `json:"peer_id"`
 	Timestamp int64  `json:"timestamp,omitempty"`
 	Data      []byte `json:"data"`
 }
+```
 
 - `network.libp2p.OpenStream`: `TBD`
 

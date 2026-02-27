@@ -9,10 +9,13 @@
 package processors
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/utils/convert"
 )
@@ -37,10 +40,43 @@ func (p *PayPerDeploymentProcessor) CollectUsage(
 	contractDID string,
 	lastProcessedAt time.Time,
 	now time.Time,
+	_ string, // providerDID - unused in this processor
+	headContractDID string, // New parameter
 ) (*contracts.UsageData, error) {
-	usageCount, err := p.store.CountDeploymentsByContract(contractDID, lastProcessedAt, now)
-	if err != nil {
-		return nil, fmt.Errorf("failed to count deployments: %w", err)
+	var usageCount int
+	var err error
+
+	// If headContractDID is provided, query by Head Contract DID
+	// Otherwise, query by Tail Contract DID (backward compatible)
+	if headContractDID != "" {
+		filters := usage.EventFilters{
+			HeadContractDID: headContractDID,
+			EventTypes:      []events.EventType{events.DeploymentStartEvent},
+			StartTime:       lastProcessedAt,
+			EndTime:         now,
+		}
+		usageEvents, err := p.store.QueryEvents(filters)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query events by head contract: %w", err)
+		}
+		// Count unique deployments from events
+		deploymentSet := make(map[string]bool)
+		for _, evt := range usageEvents {
+			var evtData events.DeploymentStart
+			if err := json.Unmarshal(evt.Data, &evtData); err != nil {
+				continue
+			}
+			if evtData.DeploymentID != "" {
+				deploymentSet[evtData.DeploymentID] = true
+			}
+		}
+		usageCount = len(deploymentSet)
+	} else {
+		// Existing logic: query by Tail Contract DID
+		usageCount, err = p.store.CountDeploymentsByContract(contractDID, lastProcessedAt, now)
+		if err != nil {
+			return nil, fmt.Errorf("failed to count deployments: %w", err)
+		}
 	}
 
 	return &contracts.UsageData{
@@ -72,14 +108,22 @@ func (p *PayPerDeploymentProcessor) CalculatePayment(
 
 	totalAmount := feePerDeployment * float64(usageCount)
 
+	// Generate unique UUID for this payment item
+	uniqueID := uuid.NewString()
+
 	items := []*contracts.PaymentItem{
 		{
-			UniqueID:     "", // Will be set by payment processor
-			DeploymentID: "", // Not per-deployment item, but deployment-based model
+			UniqueID:     uniqueID, // Generated UUID
+			DeploymentID: "",       // Not per-deployment item, but deployment-based model
 			Amount:       formatAmount(totalAmount),
 			Usages:       usageCount,
 			Metadata: map[string]interface{}{
-				"deployment_count": usageCount,
+				"deployment_count":     usageCount,
+				"fee_per_deployment":   feePerDeployment,
+				"total_amount":         totalAmount,
+				"payment_model":        contracts.PayPerDeployment,
+				"payment_period":       pd.PaymentPeriod,
+				"payment_period_count": pd.PaymentPeriodCount,
 			},
 		},
 	}
@@ -94,6 +138,16 @@ func (p *PayPerDeploymentProcessor) Validate(paymentDetails contracts.PaymentDet
 	}
 	if _, err := convert.StringToFloat64(paymentDetails.FeePerDeployment, "fee_per_deployment"); err != nil {
 		return err
+	}
+	// Validate payment_period if provided (optional for this model)
+	if paymentDetails.PaymentPeriod != "" {
+		if _, err := convert.ParsePaymentPeriod(paymentDetails.PaymentPeriod); err != nil {
+			return err
+		}
+	}
+	// Validate payment_period_count if provided (optional for this model)
+	if paymentDetails.PaymentPeriodCount < 0 {
+		return fmt.Errorf("payment_period_count must be a positive integer, got: %d", paymentDetails.PaymentPeriodCount)
 	}
 	return nil
 }
@@ -135,5 +189,16 @@ func (p *PayPerDeploymentProcessor) CheckAndGenerateInvoice(
 	}
 
 	// Period has elapsed, collect usage
-	return p.CollectUsage(contract.ContractDID, lastInvoiceAt, now)
+	// Detect contract type from metadata to determine query strategy
+	headContractDID := ""
+	if contract.Metadata != nil {
+		if role, ok := contract.Metadata[contracts.ContractChainRoleMetadataKey]; ok {
+			if role == contracts.ContractChainRoleHead {
+				// Head Contract: query by head_contract_did = contract's DID
+				headContractDID = contract.ContractDID
+			}
+			// For Tail Contract or P2P, headContractDID remains empty (query by contract_did)
+		}
+	}
+	return p.CollectUsage(contract.ContractDID, lastInvoiceAt, now, "", headContractDID)
 }

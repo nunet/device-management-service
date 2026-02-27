@@ -47,6 +47,8 @@ The following are the implemented behaviors and their associated capabilities:
 - DeploymentStatusBehavior: Get the status of a deployment.
 /dms/node/deployment/manifest
 - DeploymentManifestBehavior: Get the manifest of a deployment.
+/dms/node/deployment/info
+- DeploymentInfoBehavior: Get comprehensive information about a deployment in a single call.
 /dms/node/deployment/shutdown
 - DeploymentShutdownBehavior: Shutdown a deployment.
 

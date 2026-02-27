@@ -32,10 +32,11 @@ func TestPeriodicProcessor_Validate(t *testing.T) {
 		{
 			name: "valid payment details",
 			paymentDetails: contracts.PaymentDetails{
-				PaymentModel:   contracts.Periodic,
-				FeePerTimeUnit: "0.1",
-				TimeUnit:       "hour",
-				PaymentPeriod:  contracts.PaymentPeriodDay,
+				PaymentModel:       contracts.Periodic,
+				FeePerTimeUnit:     "0.1",
+				TimeUnit:           "hour",
+				PaymentPeriod:      contracts.PaymentPeriodDay,
+				PaymentPeriodCount: 1,
 			},
 			wantErr: false,
 		},
@@ -90,7 +91,7 @@ func TestPeriodicProcessor_CollectUsage(t *testing.T) {
 	store := setupTestUsageStore(t)
 	processor := NewPeriodicProcessor(store)
 
-	usageData, err := processor.CollectUsage("test-contract-1", time.Now(), time.Now())
+	usageData, err := processor.CollectUsage("test-contract-1", time.Now(), time.Now(), "", "")
 	require.Error(t, err)
 	require.Nil(t, usageData)
 	require.Contains(t, err.Error(), "does not support manual billing")

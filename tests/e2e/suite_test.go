@@ -220,6 +220,10 @@ func (pw *prefixWriter) Write(p []byte) (n int, err error) {
 
 // TestSuite defines a single end-to-end test suite, with a dedicated network.
 // TODO rename to TestCase?
+// CapabilitiesHandler is a function that sets up UCAN capabilities for contract chains
+// It receives the test suite and can customize capability grants/delegations
+type CapabilitiesHandler func(suite *TestSuite)
+
 type TestSuite struct {
 	suite.Suite
 	runner func(*TestSuite)
@@ -241,6 +245,10 @@ type TestSuite struct {
 	testDataDir string
 	rootTrace   *apm.Transaction
 	tracer      *apm.Tracer
+
+	// capabilitiesHandler is an optional function to customize UCAN capability setup
+	// If set, it will be used instead of the default mutual grant logic in setupTestNetwork
+	capabilitiesHandler CapabilitiesHandler
 }
 
 func (s *TestSuite) startNode(index int) {
@@ -551,11 +559,42 @@ func (s *TestSuite) setupTestNetwork() {
 			if nodeIndex == 1 || nodeIndex == 2 || nodeIndex == 3 {
 				cfg.Job.RequireContractsForDeployment = true
 			}
-		}
+		case "deployment_with_contract_chain_tests":
+			if nodeIndex == 5 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9427/"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_orchestration_fee_tests":
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9428/"
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_usdt_price_conversion_tests":
+			// Configure CoinMarketCap sandbox API for all nodes
+			// This is set for all nodes in the test (similar to how PaymentProvider is configured)
+			cfg.CoinMarketCap.APIKey = "4851bf9c832340328bc48b10cab272f7"
+			cfg.CoinMarketCap.BaseURL = "https://pro-api.coinmarketcap.com/v2"
+			cfg.CoinMarketCap.EndpointPath = "/tools/price-conversion"
+			cfg.CoinMarketCap.CacheTTL = "1s" // Short TTL for testing
 
-		if s.Name == "deployment_with_contracts_collect_after_pay_tests" && nodeIndex == 3 {
-			cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9425/"
-			cfg.PaymentProvider.Mode = true
+			// Also configure PaymentProvider for payment validator (node 3)
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9429/" // Use different port to avoid conflicts
+				cfg.PaymentProvider.Mode = true
+			}
+		case "deployment_with_contracts_usdt_quote_tests":
+			// Configure CoinMarketCap sandbox API for all nodes
+			cfg.CoinMarketCap.APIKey = "4851bf9c832340328bc48b10cab272f7"
+			cfg.CoinMarketCap.BaseURL = "https://pro-api.coinmarketcap.com/v2"
+			cfg.CoinMarketCap.EndpointPath = "/tools/price-conversion"
+			cfg.CoinMarketCap.CacheTTL = "1s" // Short TTL for testing
+			cfg.CoinMarketCap.QuoteTTL = "2m" // Quote TTL for testing
+
+			// Also configure PaymentProvider for payment validator (node 3)
+			if nodeIndex == 3 {
+				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9428/" // Use different port to avoid conflicts
+				cfg.PaymentProvider.Mode = true
+			}
 		}
 
 		var err error
@@ -570,38 +609,44 @@ func (s *TestSuite) setupTestNetwork() {
 	summ.Test.NodesReady = true
 	s.printSummary()
 
-	// grant mutual access to all nodes in the network.
-	for i, node := range s.nodes {
-		// set the root anchor
-		node.client.addRootAnchor(s.T(), node.dmsContext, node.userDID, node.password)
+	// Use custom capabilities handler if set, otherwise use default
+	if s.capabilitiesHandler != nil {
+		s.T().Logf("using custom capabilities handler")
+		s.capabilitiesHandler(s)
+	} else {
+		// Default: grant mutual access to all nodes in the network
+		for i, node := range s.nodes {
+			// set the root anchor
+			node.client.addRootAnchor(s.T(), node.dmsContext, node.userDID, node.password)
 
-		// grant access to all other nodes
-		for j, otherNode := range s.nodes {
-			if i == j {
-				continue
+			// grant access to all other nodes
+			for j, otherNode := range s.nodes {
+				if i == j {
+					continue
+				}
+
+				nodeGrantToken := node.client.grant(s.T(), node.dmsContext, otherNode.userDID, node.password)
+				node.client.anchor(s.T(), nodeGrantToken, node.dmsContext, "require", node.password)
+				otherNode.client.anchor(s.T(), nodeGrantToken, otherNode.userContext, "provide", otherNode.password)
+
+				otherNodeGrantToken := otherNode.client.grant(s.T(), otherNode.dmsContext, node.userDID, otherNode.password)
+				otherNode.client.anchor(s.T(), otherNodeGrantToken, otherNode.dmsContext, "require", otherNode.password)
+				node.client.anchor(s.T(), otherNodeGrantToken, node.userContext, "provide", node.password)
+
+				if s.grantTokens[node.index] == nil {
+					s.grantTokens[node.index] = make(map[int]string)
+				}
+				if s.grantTokens[otherNode.index] == nil {
+					s.grantTokens[otherNode.index] = make(map[int]string)
+				}
+				s.grantTokens[node.index][otherNode.index] = nodeGrantToken
+				s.grantTokens[otherNode.index][node.index] = otherNodeGrantToken
 			}
 
-			nodeGrantToken := node.client.grant(s.T(), node.dmsContext, otherNode.userDID, node.password)
-			node.client.anchor(s.T(), nodeGrantToken, node.dmsContext, "require", node.password)
-			otherNode.client.anchor(s.T(), nodeGrantToken, otherNode.userContext, "provide", otherNode.password)
-
-			otherNodeGrantToken := otherNode.client.grant(s.T(), otherNode.dmsContext, node.userDID, otherNode.password)
-			otherNode.client.anchor(s.T(), otherNodeGrantToken, otherNode.dmsContext, "require", otherNode.password)
-			node.client.anchor(s.T(), otherNodeGrantToken, node.userContext, "provide", node.password)
-
-			if s.grantTokens[node.index] == nil {
-				s.grantTokens[node.index] = make(map[int]string)
-			}
-			if s.grantTokens[otherNode.index] == nil {
-				s.grantTokens[otherNode.index] = make(map[int]string)
-			}
-			s.grantTokens[node.index][otherNode.index] = nodeGrantToken
-			s.grantTokens[otherNode.index][node.index] = otherNodeGrantToken
+			// delegate to dms
+			delegateToken := node.client.delegate(s.T(), node.userContext, node.dmsDID, node.password)
+			node.client.anchor(s.T(), delegateToken, node.dmsContext, "provide", node.password)
 		}
-
-		// delegate to dms
-		delegateToken := node.client.delegate(s.T(), node.userContext, node.dmsDID, node.password)
-		node.client.anchor(s.T(), delegateToken, node.dmsContext, "provide", node.password)
 	}
 
 	summ.Test.CapsReady = true

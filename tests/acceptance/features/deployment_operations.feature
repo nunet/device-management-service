@@ -7,7 +7,6 @@ Feature: Deployment Operations
       | Alice   | SP   | false     | nunet |
       | Bob     | CP   | true      | nunet |
 
-  @wip
   Scenario Outline: Maintain history after restart of task
     Given "Alice" has 1 task <status> on "Bob"
     And "Alice" restarts DMS
@@ -21,7 +20,6 @@ Feature: Deployment Operations
     |  "Committing"  |
     | "Provisioning" |
 
-  @wip
   Scenario Outline: Maintain history after restart of service
     Given "Alice" has 1 service <status> on "Bob"
     And "Alice" restarts DMS
@@ -34,7 +32,6 @@ Feature: Deployment Operations
     |  "Committing"  |
     | "Provisioning" |
 
-  @wip
   Scenario: Prune deployment
     Given "Alice" has 1 task completed on "Bob"
     When "Alice" prunes the deployment
@@ -64,7 +61,6 @@ Feature: Deployment Operations
   @complexity:low
   Scenario: Shutdown/stop a running deployment
 
-  @complexity:medium
   Scenario: List deployments with pagination and status filter
     Given "Alice" has 2 tasks with status "Running" on "Bob"
     And "Alice" has 1 task with status "Completed" on "Bob"
@@ -78,3 +74,39 @@ Feature: Deployment Operations
     And all deployments should have status "Running"
     And the response should indicate false more results available
     And the response should have total 2
+
+  Scenario: Get comprehensive deployment information
+    Given "Alice" has 1 service "Running" on "Bob"
+    When "Alice" gets deployment info for the deployment
+    Then "Alice" should receive deployment info with status, manifest, and allocations
+    And the deployment info should contain valid allocation details
+
+  Scenario: Get deployment information with resource usage
+    Given "Alice" has 1 service "Running" on "Bob"
+    When "Alice" gets deployment info with usage for the deployment
+    Then "Alice" should receive deployment info with usage statistics
+    And each allocation should have executor stats in allocation details
+
+  Scenario: Get deployment information with log paths
+    Given "Alice" has 1 service "Running" on "Bob"
+    When "Alice" gets deployment info with logs for the deployment
+    Then "Alice" should receive deployment info with log paths
+    And log paths should be valid file paths
+    And log files should exist at the specified paths
+
+  Scenario: Get deployment information with logs for specific allocations
+    Given "Alice" has 1 service "Running" on "Bob"
+    When "Alice" gets deployment info with logs for allocation "alloc1"
+    Then "Alice" should receive deployment info with log paths only for "alloc1"
+
+  Scenario: Get complete deployment information (all options)
+    Given "Alice" has 1 service "Running" on "Bob"
+    When "Alice" gets complete deployment info (with usage and logs) for the deployment
+    Then "Alice" should receive deployment info with status, manifest, allocations, usage, and log paths
+    And all response fields should be populated correctly
+
+  Scenario: Get deployment information for non-running deployment
+    Given "Alice" has 1 task "Completed" on "Bob"
+    When "Alice" gets deployment info for the deployment
+    Then "Alice" should receive deployment info with status and manifest from store
+    And allocations should be empty or contain minimal info

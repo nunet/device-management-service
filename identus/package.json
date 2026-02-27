@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@hyperledger/identus-sdk": "^7.0.0"
+  }
+}

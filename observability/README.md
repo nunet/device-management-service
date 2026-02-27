@@ -365,3 +365,11 @@ Flight recorder records the last N seconds of the DMS execution and saves it to 
 **Activation:** Start DMS with `DMS_FLIGHTREC_SEC=60` for one minute of flight recording (started automatically).
 
 **Capturing:** By calling the dedicated behavior `/dms/debug/flightrec`. Only a single capture per process run can take place.
+
+### Local Grafana
+
+1. Go to `/observability/metircs`
+2. Run `docker compose up`
+3. [Add Prometheus datasource](http://localhost:3000/connections/datasources/prometheus)
+4. Generate sample data using DMS
+5. Go to [Drilldown - Metrics]http://localhost:3000/a/grafana-metricsdrilldown-app/drilldown)

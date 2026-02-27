@@ -1,2 +1,4 @@
+/maint-scripts
+/proto
 /tests/e2e
 /tests/acceptance

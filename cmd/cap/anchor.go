@@ -29,11 +29,12 @@ import (
 
 // AnchorOptions holds the command-line options for the anchor command.
 type AnchorOptions struct {
-	Context string
-	Root    string
-	Provide string
-	Require string
-	Revoke  string
+	Context  string
+	Root     string
+	Provide  string
+	Require  string
+	Revoke   string
+	PrismURL string
 }
 
 func newAnchorCmd(dmsCLI *cli.DmsCLI) *cobra.Command {
@@ -74,6 +75,7 @@ Note: The --context flag is required to specify the capability context.`,
 	useFlagRequire(cmd, &opts.Require)
 	useFlagProvide(cmd, &opts.Provide)
 	useFlagRevoke(cmd, &opts.Revoke)
+	cmd.Flags().StringVar(&opts.PrismURL, "prism-url", "", "PRISM resolver URL (e.g., http://localhost:8080). Required when adding require/provide/revoke anchors with PRISM DIDs. Can also be set via PRISM_RESOLVER_URL environment variable.")
 
 	_ = cmd.MarkFlagRequired(fnContext)
 	cmd.MarkFlagsOneRequired(fnProvide, fnRoot, fnRequire, fnRevoke)
@@ -86,6 +88,23 @@ func runAnchorCmd(_ context.Context, dmsCLI *cli.DmsCLI, opts AnchorOptions, _ c
 	capCtx, err := utils.LoadCapabilityContext(dmsCLI, opts.Context)
 	if err != nil {
 		return err
+	}
+
+	// Configure PRISM resolver if URL is provided (needed for require/provide/revoke with PRISM DIDs)
+	// Check flag first, then environment variable
+	prismURL := opts.PrismURL
+	if prismURL == "" {
+		prismURL = dmsCLI.Env().Getenv("PRISM_RESOLVER_URL")
+	}
+
+	originalConfig := did.GetPRISMResolverConfig()
+	if prismURL != "" {
+		did.SetPRISMResolverConfig(did.PRISMResolverConfig{
+			ResolverURL:                 prismURL,
+			PreferredVerificationMethod: originalConfig.PreferredVerificationMethod,
+			HTTPClient:                  originalConfig.HTTPClient,
+		})
+		defer did.SetPRISMResolverConfig(originalConfig)
 	}
 
 	switch {

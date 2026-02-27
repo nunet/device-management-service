@@ -13,6 +13,7 @@ import (
 	"fmt"
 
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	dmsnode "gitlab.com/nunet/device-management-service/dms/node"
 )
 
 // TODO: Deprecate keys in favor of struct fields
@@ -34,6 +35,7 @@ type (
 	extraContractsKey            struct{}
 	didsCtxKey                   struct{}
 	deploymentListResponseCtxKey struct{}
+	deploymentInfoCtxKey         struct{}
 )
 
 // TODO: Define TestCase struct
@@ -258,4 +260,18 @@ func (t *TestCtx) DeploymentListResponse() (*DeploymentListResponse, error) {
 		return nil, fmt.Errorf("no deployment list response available on context")
 	}
 	return resp, nil
+}
+
+func (t *TestCtx) DeploymentInfo() (*dmsnode.DeploymentInfoResponse, error) {
+	info, ok := t.ctx.Value(deploymentInfoCtxKey{}).(*dmsnode.DeploymentInfoResponse)
+	if !ok {
+		return nil, fmt.Errorf("no deployment info available on context")
+	}
+	return info, nil
+}
+
+func (t *TestCtx) WithDeploymentInfo(info *dmsnode.DeploymentInfoResponse) *TestCtx {
+	return &TestCtx{
+		ctx: context.WithValue(t.ctx, deploymentInfoCtxKey{}, info),
+	}
 }

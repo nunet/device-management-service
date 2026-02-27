@@ -1,5 +1,5 @@
 /dist
-/builds
+/builds/*linux*
 *.db
 maint-scripts/inventory.yaml
 *.log
@@ -43,7 +43,6 @@ sync_remote.sh
 *~
 
 # builds
-builds/
 coverage.out
 coverage.txt
 coverage.html

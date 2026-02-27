@@ -36,6 +36,7 @@ const (
 	DeploymentLogsBehavior     = "/dms/node/deployment/logs"
 	DeploymentStatusBehavior   = "/dms/node/deployment/status"
 	DeploymentManifestBehavior = "/dms/node/deployment/manifest"
+	DeploymentInfoBehavior     = "/dms/node/deployment/info"
 	DeploymentShutdownBehavior = "/dms/node/deployment/shutdown"
 	DeploymentPruneBehavior    = "/dms/node/deployment/prune"
 	DeploymentDeleteBehavior   = "/dms/node/deployment/delete"
@@ -107,14 +108,16 @@ const (
 	// to produce the usages.
 	ContractUsagesCalculateBehavior = TokenomicNamespace + "/contract/usages/calculate"
 	// registered by the contract actor
-	ContractTerminationBehavior     = TokenomicNamespace + "/contract/terminate"
-	ContractCompleteBehavior        = TokenomicNamespace + "/contract/complete"
-	ContractStatusBehavior          = TokenomicNamespace + "/contract/state"
-	ContractSettleBehavior          = TokenomicNamespace + "/contract/settle"
-	ContractValidationBehavior      = TokenomicNamespace + "/contract/validate"
-	ContractSignBehavior            = TokenomicNamespace + "/contract/sign"
-	ContractEventsBehavior          = TokenomicNamespace + "/contract/events"
-	ContractPaymentValidateBehavior = TokenomicNamespace + "/contract/payment/validate"
+	ContractTerminationBehavior       = TokenomicNamespace + "/contract/terminate"
+	ContractCompleteBehavior          = TokenomicNamespace + "/contract/complete"
+	ContractStatusBehavior            = TokenomicNamespace + "/contract/state"
+	ContractSettleBehavior            = TokenomicNamespace + "/contract/settle"
+	ContractValidationBehavior        = TokenomicNamespace + "/contract/validate"
+	ContractChainVerificationBehavior = TokenomicNamespace + "/contract/chain/verify"
+	ContractSignBehavior              = TokenomicNamespace + "/contract/sign"
+	ContractEventsBehavior            = TokenomicNamespace + "/contract/events"
+	ContractPaymentValidateBehavior   = TokenomicNamespace + "/contract/payment/validate"
+	ContractInfoBehavior              = TokenomicNamespace + "/contract/info"
 
 	// listened by payment validator for incoming payment verifications
 	ContractPaymentValidationRequestBehavior = TokenomicNamespace + "/contract/payment/validation/request"
@@ -130,6 +133,11 @@ const (
 	ContractTransactionBehavior             = TokenomicNamespace + "/contract/transaction"
 	ContractListLocalTransactionsBehavior   = TokenomicNamespace + "/contract/transactions/list"
 	ContractConfirmLocalTransactionBehavior = TokenomicNamespace + "/contract/transactions/confirm"
+
+	// Payment quote behaviors
+	ContractGetPaymentQuoteBehavior      = TokenomicNamespace + "/contract/payment/quote/get"
+	ContractValidatePaymentQuoteBehavior = TokenomicNamespace + "/contract/payment/quote/validate"
+	ContractCancelPaymentQuoteBehavior   = TokenomicNamespace + "/contract/payment/quote/cancel"
 
 	PromiseBidToBidBehavior   = "/dms/deployment/promisebid"
 	PromiseBidSigningBehavior = "/dms/deployment/promisebid/sign"
@@ -160,3 +168,16 @@ var (
 		Static:          "undefined",
 	}
 )
+
+// ContractInfoRequest is used to request contract information from a contract host
+type ContractInfoRequest struct {
+	ContractDID string `json:"contract_did"` // Contract DID to retrieve information for
+}
+
+// ContractInfoResponse contains contract information returned by the contract host
+type ContractInfoResponse struct {
+	OK        bool   `json:"ok"`        // Whether the request was successful
+	Error     string `json:"error"`     // Error message if request failed
+	Provider  string `json:"provider"`  // Provider DID (from ContractParticipants.Provider)
+	Requestor string `json:"requestor"` // Requestor DID (from ContractParticipants.Requestor)
+}

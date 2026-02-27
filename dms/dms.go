@@ -53,6 +53,7 @@ import (
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/payment"
+	payment_quote "gitlab.com/nunet/device-management-service/tokenomics/store/payment_quote"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/types"
@@ -247,6 +248,24 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	capStoreDir := filepath.Join(gcfg.UserDir, node.CapstoreDir)
 	capStoreFile := filepath.Join(capStoreDir, fmt.Sprintf("%s.cap", contextName))
 
+	// Check if capability context exists and if it uses a PRISM DID
+	// If so, add PRISM provider to trust context before loading
+	if _, err := fs.Stat(capStoreFile); err == nil {
+		// File exists, check if it's a PRISM DID
+		prismDIDStr, err := node.GetPrismDID(fs, gcfg.UserDir, contextName)
+		if err == nil && prismDIDStr != "" {
+			// This context has a PRISM DID association
+			prismDID, err := did.FromString(prismDIDStr)
+			if err == nil {
+				// Create PRISM provider and add to trust context
+				prismProvider, err := did.ProviderFromPRISMPrivateKey(prismDID, privK)
+				if err == nil {
+					trustCtx.AddProvider(prismProvider)
+				}
+			}
+		}
+	}
+
 	capCtx, err := LoadOrCreateCapCtx(
 		fs, capStoreFile, trustCtx, contextName, pubKey)
 	if err != nil {
@@ -257,7 +276,6 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 
 	trustCtx.Start(time.Hour)
 	capCtx.Start(5 * time.Minute)
-
 	hostLocation := geolocation.Geolocation{
 		Continent: gcfg.HostContinent,
 		Country:   gcfg.HostCountry,
@@ -274,6 +292,11 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	txStore, err := transaction.New(db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create transaction store: %w", err)
+	}
+
+	paymentQuoteStore, err := payment_quote.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create payment quote store: %w", err)
 	}
 
 	factories := provider.NewProviderFactoryRegistry(capCtx.DID().URI)
@@ -306,6 +329,7 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		deploymentStore,
 		provRegistry,
 		provisionedResourceStore,
+		paymentQuoteStore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -484,6 +508,7 @@ func NewDMSDB(path string) (*clover.DB, error) {
 			"service_provider_transactions",
 			"contracts_usage",
 			"usage_metadata",
+			"payment_quotes",
 		},
 	)
 }

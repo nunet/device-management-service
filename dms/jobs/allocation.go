@@ -121,12 +121,31 @@ type Allocation struct {
 
 	Contracts            map[string]types.ContractConfig
 	contractEventHandler *eventhandler.EventHandler
+	contractStore        TailContractGetter
 
 	createdAt time.Time
 	startedAt time.Time
 
 	// Liveness reporting state
 	liveness allocationLiveness
+}
+
+func (a *Allocation) setStatus(ns AllocationStatus, msg string, notify bool) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	os := a.status
+	a.status = ns
+
+	if notify && os != ns {
+		a.statusChangeNotify(os, ns, msg)
+	}
+}
+
+// TailContractFinder is an interface for finding tail contracts associated with a head contract.
+// This interface is used to avoid import cycles between jobs and store packages.
+// It returns ContractConfig directly to avoid referencing contracts.Contract.
+type TailContractGetter interface {
+	FindTailContract(headContractConfig types.ContractConfig, computeProviderDID string) (*types.ContractConfig, error)
 }
 
 // NewAllocation creates a new allocation given the actor.
@@ -142,6 +161,7 @@ func NewAllocation(
 	executor types.Executor,
 	selfRelease func() error,
 	contractEventHandler *eventhandler.EventHandler,
+	contractStore TailContractGetter,
 	deploymentID string,
 ) (*Allocation, error) {
 	if network == nil {
@@ -183,6 +203,7 @@ func NewAllocation(
 		}{},
 		createdAt:            time.Now(),
 		contractEventHandler: contractEventHandler,
+		contractStore:        contractStore,
 		computeProviderDID:   actor.Parent().DID.URI,
 		deploymentID:         deploymentID,
 	}
@@ -214,13 +235,31 @@ func (a *Allocation) GetPortMapping() map[int]int {
 	return ports
 }
 
+// findTailContractsForHeadContract finds Tail Contracts associated with a Head Contract
+// using the Head Contract config from the ensemble
+func (a *Allocation) findTailContractForHeadContract(headContractConfig types.ContractConfig) (*types.ContractConfig, error) {
+	if a.contractStore == nil {
+		return nil, fmt.Errorf("contract store is not available")
+	}
+
+	tailContract, err := a.contractStore.FindTailContract(headContractConfig, a.computeProviderDID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tail contracts for head contract %s: %w", headContractConfig.DID, err)
+	}
+
+	return tailContract, nil
+}
+
 // Run creates the executor based on the execution engine configuration.
 func (a *Allocation) Run(
 	ctx context.Context, subnetIP string,
 	gatewayIP string, portMapping map[int]int,
 ) error {
 	a.lock.Lock()
-	defer a.lock.Unlock()
+	defer func() {
+		a.lock.Unlock()
+		a.setStatus(AllocationRunning, "allocation started", true)
+	}()
 
 	if a.status == AllocationRunning {
 		log.Warnw("allocation_already_running",
@@ -292,15 +331,50 @@ func (a *Allocation) Run(
 	}
 
 	// Update status (lock already held from function start)
-	oldStatus := a.status
 	a.startedAt = time.Now()
-	a.status = AllocationRunning
 
-	for _, v := range a.Contracts {
+	var headContractConfig types.ContractConfig
+	// Find Head Contract config from ensemble contracts
+	for _, contractConfig := range a.Contracts {
+		headContractConfig = contractConfig
+		break
+	}
+	headContractDID := headContractConfig.DID
+
+	// Find Tail Contracts associated with Head Contract
+	var contractsToNotify []types.ContractConfig
+	if headContractDID != "" {
+		// Contract chain scenario: use Tail Contracts
+		tailContract, err := a.findTailContractForHeadContract(headContractConfig)
+		if err != nil {
+			log.Warnw("failed to find tail contracts, falling back to ensemble contracts",
+				"head_contract_did", headContractDID,
+				"error", err)
+			// Convert map to slice for fallback
+			for _, v := range a.Contracts {
+				contractsToNotify = append(contractsToNotify, v)
+			}
+		} else {
+			contractsToNotify = []types.ContractConfig{*tailContract}
+		}
+	} else {
+		// P2P scenario: use contracts from ensemble
+		for _, v := range a.Contracts {
+			contractsToNotify = append(contractsToNotify, v)
+		}
+	}
+
+	// Send events to Tail Contracts (or P2P contracts)
+	for _, v := range contractsToNotify {
 		evt := events.StartAllocation{
-			EventBase:      events.EventBase{Type: events.StartAllocationEvent},
-			AllocationBase: events.AllocationBase{AllocationID: a.ID, DeploymentID: a.deploymentID, ComputeProviderDID: a.computeProviderDID},
-			Resources:      a.Job.Resources,
+			EventBase: events.EventBase{Type: events.StartAllocationEvent},
+			AllocationBase: events.AllocationBase{
+				AllocationID:       a.ID,
+				DeploymentID:       a.deploymentID,
+				ComputeProviderDID: a.computeProviderDID,
+				HeadContractDID:    headContractDID, // Include Head Contract DID in payload
+			},
+			Resources: a.Job.Resources,
 		}
 		a.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,
@@ -308,10 +382,6 @@ func (a *Allocation) Run(
 			Payload:         evt,
 		})
 	}
-
-	// Send status change notification (must be done with lock released)
-	// Release lock temporarily to avoid blocking on message send
-	a.sendStatusChangeNotification(oldStatus, AllocationRunning, "allocation started")
 
 	// NEW: Log the resources we've assigned for this run
 	log.Infow("allocation_run_started",
@@ -386,10 +456,9 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 		}
 	}
 
-	a.lock.Lock()
 	if err != nil {
 		log.Warnf("execution failed: %v", err)
-		a.status = AllocationFailed
+		a.setStatus(AllocationFailed, "execution failed", true)
 
 		exitCode := 0
 		if r != nil {
@@ -406,7 +475,7 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 		switch {
 		case r.ExitCode != 0:
 			log.Infof("execution exited with exit code: %d", r.ExitCode)
-			a.status = AllocationFailed
+			a.setStatus(AllocationFailed, fmt.Sprintf("execution exited with exit code: %d", r.ExitCode), true)
 
 			notifyOrchestrator(behaviors.TaskTerminationNotification{
 				Error: behaviors.TerminationError{
@@ -415,12 +484,12 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 				},
 			})
 		case r.ExitCode == 0 && !r.Killed:
-			log.Infof("execution successfully completed")
-			a.status = AllocationCompleted
+			log.Infof("task execution successfully completed")
+			a.setStatus(AllocationCompleted, "task execution successfully completed", true)
 			notifyOrchestrator(behaviors.TaskTerminationNotification{})
 		case r.ExitCode == 0 && r.Killed:
 			log.Infof("execution possibly killed")
-			a.status = AllocationFailed
+			a.setStatus(AllocationFailed, "execution possibly killed", true)
 			notifyOrchestrator(behaviors.TaskTerminationNotification{
 				Error: behaviors.TerminationError{
 					ExitCode: r.ExitCode,
@@ -431,17 +500,59 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 		}
 	}
 
-	a.lock.Unlock()
 	log.Debugf("self releasing: %s", a.ID)
 	err = a.selfRelease()
 	if err != nil {
 		log.Errorf("error releasing self: %s", err)
 	}
 
-	for _, v := range a.Contracts {
+	if len(a.Contracts) == 0 {
+		log.Errorf("no contracts  (handleTranscience)",
+			"labels", string(observability.LabelAllocation),
+			"allocationID", a.ID)
+		return
+	}
+
+	var headContractConfig types.ContractConfig
+	for _, contractConfig := range a.Contracts {
+		headContractConfig = contractConfig
+		break
+	}
+	headContractDID := headContractConfig.DID
+
+	// Find Tail Contracts associated with Head Contract
+	var contractsToNotify []types.ContractConfig
+	if headContractDID != "" {
+		// Contract chain scenario: use Tail Contracts
+		tailContract, err := a.findTailContractForHeadContract(headContractConfig)
+		if err != nil {
+			log.Warnw("failed to find tail contracts, falling back to ensemble contracts",
+				"head_contract_did", headContractDID,
+				"error", err)
+			// Convert map to slice for fallback
+			for _, v := range a.Contracts {
+				contractsToNotify = append(contractsToNotify, v)
+			}
+		} else {
+			contractsToNotify = []types.ContractConfig{*tailContract}
+		}
+	} else {
+		// P2P scenario: use contracts from ensemble
+		for _, v := range a.Contracts {
+			contractsToNotify = append(contractsToNotify, v)
+		}
+	}
+
+	// Send events to Tail Contracts (or P2P contracts)
+	for _, v := range contractsToNotify {
 		evt := events.CompleteAllocation{
-			EventBase:      events.EventBase{Type: events.CompleteAllocationEvent},
-			AllocationBase: events.AllocationBase{AllocationID: a.ID, DeploymentID: a.deploymentID, ComputeProviderDID: a.computeProviderDID},
+			EventBase: events.EventBase{Type: events.CompleteAllocationEvent},
+			AllocationBase: events.AllocationBase{
+				AllocationID:       a.ID,
+				DeploymentID:       a.deploymentID,
+				ComputeProviderDID: a.computeProviderDID,
+				HeadContractDID:    headContractDID, // Include Head Contract DID in payload
+			},
 		}
 		a.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,
@@ -453,29 +564,24 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 
 // Cancel stops the running executor
 func (a *Allocation) stopExecution(ctx context.Context) error {
-	a.lock.Lock()
-	defer a.lock.Unlock()
-
 	log.Debugw("allocation_stopping_execution",
 		"labels", string(observability.LabelAllocation),
 		"allocationID", a.ID)
 
-	if a.status != AllocationRunning {
+	if a.Status().Status != AllocationRunning {
 		return nil
 	}
-
-	// Question: maybe just setting this at the end?
-	a.status = AllocationStopped
 
 	if a.executor == nil {
 		return nil
 	}
 
 	if err := a.executor.Cancel(ctx, a.executionID); err != nil {
-		a.status = AllocationFailed
+		a.setStatus(AllocationFailed, fmt.Sprintf("error stopping executor: %v", err), true)
 		return fmt.Errorf("stop execution: %w", err)
 	}
 
+	a.setStatus(AllocationStopped, "allocation stopped", true)
 	log.Debugw("allocation_stopped_execution",
 		"labels", string(observability.LabelAllocation),
 		"allocationID", a.ID)
@@ -502,10 +608,46 @@ func (a *Allocation) Cleanup() error {
 // it won't return errors right away but try to clean up
 // all the other steps
 func (a *Allocation) Terminate(ctx context.Context) error {
-	for _, v := range a.Contracts {
+	var headContractConfig types.ContractConfig
+	for _, contractConfig := range a.Contracts {
+		headContractConfig = contractConfig
+		break
+	}
+	headContractDID := headContractConfig.DID
+
+	// Find Tail Contracts associated with Head Contract
+	var contractsToNotify []types.ContractConfig
+	if headContractDID != "" {
+		// Contract chain scenario: use Tail Contracts
+		tailContract, err := a.findTailContractForHeadContract(headContractConfig)
+		if err != nil {
+			log.Warnw("failed to find tail contracts, falling back to ensemble contracts",
+				"head_contract_did", headContractDID,
+				"error", err)
+			// Convert map to slice for fallback
+			for _, v := range a.Contracts {
+				contractsToNotify = append(contractsToNotify, v)
+			}
+		} else {
+			contractsToNotify = []types.ContractConfig{*tailContract}
+		}
+	} else {
+		// P2P scenario: use contracts from ensemble
+		for _, v := range a.Contracts {
+			contractsToNotify = append(contractsToNotify, v)
+		}
+	}
+
+	// Send events to Tail Contracts (or P2P contracts)
+	for _, v := range contractsToNotify {
 		evt := events.StopAllocation{
-			EventBase:      events.EventBase{Type: events.StopAllocationEvent},
-			AllocationBase: events.AllocationBase{AllocationID: a.ID, DeploymentID: a.deploymentID, ComputeProviderDID: a.computeProviderDID},
+			EventBase: events.EventBase{Type: events.StopAllocationEvent},
+			AllocationBase: events.AllocationBase{
+				AllocationID:       a.ID,
+				DeploymentID:       a.deploymentID,
+				ComputeProviderDID: a.computeProviderDID,
+				HeadContractDID:    headContractDID, // Include Head Contract DID in payload
+			},
 		}
 		a.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,
@@ -514,8 +656,8 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 		})
 	}
 
-	status := a.Status()
-	if status.Status != AllocationStopped && status.Status != AllocationCompleted {
+	status := a.Status().Status
+	if status != AllocationStopped && status != AllocationCompleted {
 		err := a.Stop(ctx)
 		if err != nil {
 			log.Warnw("allocation_failed_to_stop",
@@ -524,10 +666,10 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 				"allocationID", a.ID)
 			return fmt.Errorf("failed to stop allocation: %w", err)
 		}
-	}
 
-	a.lock.Lock()
-	defer a.lock.Unlock()
+		// terminated status only if had to stop
+		a.setStatus(AllocationTerminated, "allocation terminated", true)
+	}
 
 	if err := a.Cleanup(); err != nil {
 		log.Warnw("allocation_failed_to_cleanup",
@@ -535,8 +677,6 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 			"error", err,
 			"allocationID", a.ID)
 	}
-
-	a.status = AllocationTerminated
 
 	return nil
 }
@@ -576,15 +716,11 @@ func (a *Allocation) Stop(ctx context.Context) error {
 
 	err = a.stopExecution(ctx)
 	if err != nil {
-		a.lock.Lock()
-		a.status = AllocationFailed
-		a.lock.Unlock()
+		a.setStatus(AllocationFailed, "failed to stop execution", true)
 		return fmt.Errorf("stop execution: %w", err)
 	}
 
-	a.lock.Lock()
-	a.status = AllocationStopped
-	a.lock.Unlock()
+	a.setStatus(AllocationStopped, "allocation stopped", true)
 
 	return nil
 }
@@ -921,8 +1057,8 @@ func (a *Allocation) sendToOrchestratorWithRetry(
 	return fmt.Errorf("failed after %d attempts: %w", maxRetries+1, lastErr)
 }
 
-// sendStatusChangeNotification sends immediate notification when status changes
-func (a *Allocation) sendStatusChangeNotification(oldStatus, newStatus AllocationStatus, reason string) {
+// statusChangeNotify sends immediate notification when status changes
+func (a *Allocation) statusChangeNotify(oldStatus, newStatus AllocationStatus, reason string) {
 	if !a.liveness.enabled {
 		return
 	}

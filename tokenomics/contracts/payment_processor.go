@@ -25,9 +25,16 @@ type UsageData struct {
 type PaymentItem struct {
 	UniqueID     string
 	DeploymentID string // Empty for non-deployment models
-	Amount       string
+	Amount       string // Final amount in payment currency (NTX after conversion)
 	Usages       int
 	Metadata     map[string]interface{} // Model-specific metadata
+
+	// Fields for price conversion tracking (optional)
+	OriginalAmount      string    `json:"original_amount,omitempty"`      // Amount in pricing currency (USDT)
+	PricingCurrency     string    `json:"pricing_currency,omitempty"`     // Currency of original amount
+	ExchangeRate        string    `json:"exchange_rate,omitempty"`        // Rate used for conversion
+	ConversionTimestamp time.Time `json:"conversion_timestamp,omitempty"` // When conversion occurred
+	IsOrchestrationFee  bool      `json:"is_orchestration_fee,omitempty"` // Indicates if this is an orchestration fee transaction
 }
 
 // PaymentModelProcessor defines the clear, shared interface for all payment model processors.
@@ -38,10 +45,14 @@ type PaymentModelProcessor interface {
 	// This method is called when a user manually triggers invoice generation.
 	// Processors have full control over how they query and process events from the store.
 	// Returns UsageData containing model-specific usage information.
+	// providerDID is optional - if provided, filters events by provider for per-node billing.
+	// headContractDID is optional - if provided, queries events by Head Contract DID instead of Tail Contract DID
 	CollectUsage(
 		contractDID string,
 		lastProcessedAt time.Time,
 		now time.Time,
+		providerDID string, // Optional: if provided, filters events by provider
+		headContractDID string, // Optional: if provided, queries by Head Contract DID
 	) (*UsageData, error)
 
 	// CalculatePayment calculates payment items from usage data.

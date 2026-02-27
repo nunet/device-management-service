@@ -19,6 +19,8 @@ import (
 	jtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 func (o *BasicOrchestrator) handleTaskTermination(msg actor.Envelope) {
@@ -145,6 +147,16 @@ func (o *BasicOrchestrator) handleAllocationLiveness(msg actor.Envelope) {
 
 	nInfo := o.allocs[notification.AllocationID]
 	nInfo.HeartbeatSeq = notification.SequenceNumber
+	if nInfo.Status != jtypes.AllocationStatus(notification.Status) {
+		if m := observability.AllocationStatus; m != nil {
+			m.Record(o.ctx, 1, metric.WithAttributes(
+				observability.AttrDID,
+				attribute.String("orchestratorID", o.id),
+				attribute.String("allocationID", notification.AllocationID),
+				attribute.String("status", notification.Status),
+			))
+		}
+	}
 	nInfo.Status = jtypes.AllocationStatus(notification.Status)
 	if notification.ResourceUsage != nil {
 		nInfo.ResourceUsage.CPUUsagePercent = notification.ResourceUsage.CPUUsagePercent
@@ -162,6 +174,7 @@ func (o *BasicOrchestrator) handleAllocationLiveness(msg actor.Envelope) {
 				"allocationID", notification.AllocationID,
 				"message", notification.Health.Message,
 				"check_type", notification.Health.CheckType,
+				// TODO metric in supervisor for unhealthy
 				"note", "supervisor pull checks remain authoritative")
 			nInfo.Health = "Unhealthy: " + notification.Health.Message
 		}
@@ -178,6 +191,28 @@ func (o *BasicOrchestrator) handleAllocationLiveness(msg actor.Envelope) {
 			"cpu_percent", notification.ResourceUsage.CPUUsagePercent,
 			"memory_used_bytes", notification.ResourceUsage.MemoryUsedBytes,
 			"memory_limit_bytes", notification.ResourceUsage.MemoryLimitBytes)
+	}
+
+	// metrics
+	if observability.AllocationHeartbeat != nil {
+		u := nInfo.ResourceUsage
+		observability.AllocationHeartbeat.Add(o.ctx, 1, metric.WithAttributes(
+			observability.AttrDID,
+			attribute.String("orchestratorID", o.id),
+			attribute.String("allocationID", notification.AllocationID),
+			attribute.String("status", notification.Status),
+		))
+
+		allocAttrs := metric.WithAttributes(
+			observability.AttrDID,
+			attribute.String("orchestratorID", o.id),
+			attribute.String("allocationID", notification.AllocationID),
+		)
+		observability.AllocCPUUsage.Record(o.ctx, u.CPUUsagePercent, allocAttrs)
+		observability.AllocMemUsed.Record(o.ctx, int64(u.MemoryUsedBytes), allocAttrs)
+		observability.AllocMemLimit.Record(o.ctx, int64(u.MemoryLimitBytes), allocAttrs)
+		observability.AllocNetRx.Record(o.ctx, int64(u.NetworkRxBytes), allocAttrs)
+		observability.AllocNetTx.Record(o.ctx, int64(u.NetworkTxBytes), allocAttrs)
 	}
 }
 
@@ -212,19 +247,15 @@ func (o *BasicOrchestrator) handleAllocationStatusUpdate(msg actor.Envelope) {
 	}
 
 	manifestKey := allocID.ManifestKey()
-
-	o.lock.Lock()
-	if a, ok := o.manifest.Allocations[manifestKey]; ok {
-		// Store push status as supplementary info
-		oldManifestStatus := a.Status
-		a.Status = jtypes.AllocationStatus(update.NewStatus)
-		o.manifest.Allocations[manifestKey] = a
-
-		log.Debugw("updated_manifest_from_push",
-			"allocationID", update.AllocationID,
-			"old_manifest_status", oldManifestStatus,
-			"new_push_status", update.NewStatus,
-			"note", "supervisor pull checks remain authoritative")
+	manifest := o.Manifest()
+	a, ok := manifest.Allocations[manifestKey]
+	if !ok {
+		log.Debugf("allocation %s not found on the manifest", update.AllocationID)
+		return
 	}
-	o.lock.Unlock()
+
+	// update allocation status
+	a.Status = jtypes.AllocationStatus(update.NewStatus)
+	manifest.Allocations[manifestKey] = a
+	o.updateManifest(manifest)
 }

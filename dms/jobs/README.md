@@ -49,8 +49,8 @@ ensemble as a whole has a globally unique ID (a randomn UUID).
 ### Ensemble Specification
 
 In order to deploy an ensemble, the user must specify its structure
-and constraints; this is done with a YAML file encoding the [ensemble configuration data structure](types/ensemble.go); the fields of the
-configuration structure are described in detail in this [reference](ensemble_fields_reference.md).
+and constraints; this is done with a YAML file encoding the [ensemble configuration data structure](./types/ensemble.go); the fields of the
+configuration structure are described in detail in this [reference](./ensemble.md).
 
 Fundamentally the ensemble configuration has the following structure:
 
@@ -115,9 +115,7 @@ constraint satisfaction problem over permutations of available peers
 of deploying an ensemble is called _orchestration_. In the following
 we summarize how deployment orchestration is performed.
 
-<p align="center">
-  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/dms/jobs/specs/diagrams/ensemble_deployment.png?ref_type=heads&inline=true" width="100%" alt="Ensemble Deployment Sequence Diagram">
-</p>
+![Ensemble Deployment Sequence Diagram](./specs/diagrams/ensemble_deployment.png)
 
 Ensemble deployment is initiated with a user invoking the
 `/dms/node/deployment/new` behavior on the node which is willing to
@@ -201,9 +199,7 @@ future we will also support explicitly specifying durations for
 running ensembles, and the ability to modify running ensembles in order
 to support mechanisms like auto scaling.
 
-<p align="center">
-  <img src="https://gitlab.com/nunet/device-management-service/-/raw/main/dms/jobs/specs/diagrams/ensemble_components.png?ref_type=heads&inline=true" width="50%" alt="Ensemble deployment component diagram: shows ensemble configuration on actual network after deployment is successfully finished.">
-</p>
+![Ensemble deployment component diagram: shows ensemble configuration on actual network after deployment is successfully finished.](./specs/diagrams/ensemble_components.png)
 
 ### Ensemble Supervision
 

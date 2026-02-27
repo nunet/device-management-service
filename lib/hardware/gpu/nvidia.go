@@ -88,6 +88,15 @@ func getNVIDIADeviceUUID(device nvml.Device) (string, error) {
 	return uuid, nil
 }
 
+// getNVIDIACoreCount returns the number of GPU cores (CUDA cores) for the NVIDIA device.
+func getNVIDIACoreCount(device nvml.Device) (int, error) {
+	cores, ret := device.GetNumGpuCores()
+	if !errors.Is(ret, nvml.SUCCESS) {
+		return 0, fmt.Errorf("get GPU core count: %s", nvml.ErrorString(ret))
+	}
+	return cores, nil
+}
+
 // getNVIDIAPCIAddress returns the PCI address for the NVIDIA device.
 func getNVIDIAPCIAddress(device nvml.Device) (string, error) {
 	pciInfo, ret := device.GetPciInfo()
@@ -161,11 +170,21 @@ func (n *nvidiaGPUConnector) GetGPUs() (types.GPUs, error) {
 			return nil, err
 		}
 
+		var cores uint32
+		coreCount, err := getNVIDIACoreCount(device)
+		if err != nil {
+			log.Debugw("could not get GPU core count, defaulting to 0",
+				"error", err, "uuid", uuid)
+		} else {
+			cores = uint32(coreCount)
+		}
+
 		gpu := types.GPU{
 			UUID:       uuid,
 			PCIAddress: pciAddress,
 			Model:      name,
 			VRAM:       memory.Total,
+			Cores:      cores,
 			Vendor:     types.GPUVendorNvidia,
 		}
 		gpus = append(gpus, gpu)

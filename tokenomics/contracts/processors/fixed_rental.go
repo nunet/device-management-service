@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 	"gitlab.com/nunet/device-management-service/utils/convert"
@@ -35,6 +36,8 @@ func (p *FixedRentalProcessor) CollectUsage(
 	_ string,
 	_ time.Time,
 	_ time.Time,
+	_ string, // providerDID (not used for fixed_rental)
+	_ string, // headContractDID (not used for fixed_rental)
 ) (*contracts.UsageData, error) {
 	return nil, fmt.Errorf("fixed_rental does not support manual billing")
 }
@@ -49,16 +52,20 @@ func (p *FixedRentalProcessor) CalculatePayment(
 		return nil, fmt.Errorf("invalid usage data type")
 	}
 
+	// Generate unique UUID for this payment item
+	uniqueID := uuid.NewString()
+
 	items := []*contracts.PaymentItem{
 		{
-			UniqueID:     "", // Will be set by payment processor
-			DeploymentID: "", // Not deployment-based
+			UniqueID:     uniqueID, // Generated UUID
+			DeploymentID: "",       // Not deployment-based
 			Amount:       fixedRentalUsage.Amount,
 			Usages:       1,
 			Metadata: map[string]interface{}{
 				"periods_invoiced": fixedRentalUsage.PeriodsInvoiced,
-				"period_start":     fixedRentalUsage.PeriodStart,
-				"period_end":       fixedRentalUsage.PeriodEnd,
+				"period_start":     fixedRentalUsage.PeriodStart.Format(time.RFC3339),
+				"period_end":       fixedRentalUsage.PeriodEnd.Format(time.RFC3339),
+				"last_invoice_at":  fixedRentalUsage.LastInvoiceAt.Format(time.RFC3339),
 			},
 		},
 	}
@@ -80,6 +87,9 @@ func (p *FixedRentalProcessor) Validate(paymentDetails contracts.PaymentDetails)
 	}
 	if _, err := convert.ParsePaymentPeriod(paymentDetails.PaymentPeriod); err != nil {
 		return err
+	}
+	if paymentDetails.PaymentPeriodCount <= 0 {
+		return fmt.Errorf("payment_period_count must be a positive integer, got: %d", paymentDetails.PaymentPeriodCount)
 	}
 	return nil
 }

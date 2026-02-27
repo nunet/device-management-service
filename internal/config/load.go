@@ -91,6 +91,13 @@ var DefaultConfig = Config{
 			APIKey:             "",
 			InsecureSkipVerify: false,
 		},
+		OTel: OTel{
+			Enabled:  false,
+			Endpoint: "",
+			// Enabled: true,
+			// Endpoint: "localhost:3000",
+			Insecure: true,
+		},
 	},
 	APM: APM{
 		ServerURL:   "https://apm.telemetry.nunet.io",

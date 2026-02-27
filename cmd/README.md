@@ -1,4 +1,4 @@
-# Introduction
+# Nunet Command-Line Interface (CLI)
 
 The Nunet Command-Line Interface (CLI) serves as a powerful tool for interacting with the Nunet ecosystem, enabling you to manage network configurations, control capabilities, and handle cryptographic keys. It provides a comprehensive set of commands to streamline various tasks and operations within the Nunet network.
 

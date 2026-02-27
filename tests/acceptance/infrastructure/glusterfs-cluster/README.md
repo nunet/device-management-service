@@ -110,7 +110,7 @@ Supported configuration:
 | `clients_size` | Specifies the number of clients when deploying locally | 1 |
 | `dms_passphrase` | The passphrase used to deploy and configure DMS in the cluster's main node and clients | `very-secure-passphrase` |
 | `extra_allowed_ips` | Extra IPs to be added to the glusterfs cluster firewall. Format `IP/mask`. Ex: `170.11.22.33/32`, `10.0.0.1/16`, `192.168.0.1/24` | `[]` |
-| `local_dms_deb` | If set this binary is used instead of latest available via permalink (<d.nunet.io/nunet-dms-amd64-latest.zip) | null |
+| `local_dms_deb` | If set this binary is used instead of latest available via permalink (https://d.nunet.io/nunet-dms-amd64-latest.zip) | null |
 
 Environment variables:
 

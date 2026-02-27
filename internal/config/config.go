@@ -17,6 +17,7 @@ type Config struct {
 	Job           `mapstructure:"job"           json:"job"`
 	Observability `mapstructure:"observability" json:"observability"`
 	APM           `mapstructure:"apm"           json:"apm"`
+	CoinMarketCap CoinMarketCapConfig `mapstructure:"coinmarketcap" json:"coinmarketcap"`
 }
 
 type General struct {
@@ -89,6 +90,7 @@ type Observability struct {
 	// Preferred structured layout TODO bind in observability
 	Logging Logging `mapstructure:"logging" json:"logging"`
 	Elastic Elastic `mapstructure:"elastic" json:"elastic"`
+	OTel    OTel    `mapstructure:"otel"    json:"otel"`
 
 	// Deprecated: use Logging.Level instead
 	LogLevel string `mapstructure:"log_level"             json:"-"`
@@ -145,4 +147,22 @@ type APM struct {
 	APIKey      string `mapstructure:"api_key"      json:"api_key"`
 	// SecretToken is a legacy API key used for local ELK deployments.
 	SecretToken string `mapstructure:"secret_token"      json:"secret_token"`
+}
+
+type OTel struct {
+	// Enabled controls whether OTel metrics are exported
+	Enabled bool `mapstructure:"enabled" json:"enabled"`
+	// Endpoint is the OTel Collector gRPC endpoint (e.g., "localhost:4317")
+	Endpoint string `mapstructure:"endpoint" json:"endpoint"`
+	// Insecure disables TLS for the gRPC connection
+	Insecure bool `mapstructure:"insecure" json:"insecure"`
+}
+
+// CoinMarketCap configuration for price oracle
+type CoinMarketCapConfig struct {
+	APIKey       string `mapstructure:"api_key" json:"api_key"`
+	BaseURL      string `mapstructure:"base_url" json:"base_url"`
+	EndpointPath string `mapstructure:"endpoint_path" json:"endpoint_path"`
+	CacheTTL     string `mapstructure:"cache_ttl" json:"cache_ttl"`
+	QuoteTTL     string `mapstructure:"quote_ttl" json:"quote_ttl"` // Time-to-live for payment quotes
 }

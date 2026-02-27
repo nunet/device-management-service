@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -118,7 +119,25 @@ func (c *Client) grant(t *testing.T, context, otherDID, passphrase string) strin
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
-	args := []string{"cap", "grant", "--context", context, "--cap", "/dms/tokenomics", "--cap", "/dms/tokenomics/contract/propose", "--cap", "/dms/tokenomics/contract/state", "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2026-12-31", otherDID}
+	args := []string{
+		"cap", "grant", "--context", context,
+		"--cap", "/dms/tokenomics",
+		"--cap", "/dms/tokenomics/contract/payment",
+		"--cap", "/dms/tokenomics/contract/propose",
+		"--cap", "/dms/tokenomics/contract/state",
+		"--cap", "/dms/tokenomics/contract/chain/verify",
+		"--cap", "/dms/tokenomics/contract/transaction",
+		"--cap", "/dms/tokenomics/contract/transactions",
+		"--cap", "/dms/tokenomics/contract/payment/validation/request",
+		"--cap", "/dms/tokenomics/contract/info",
+		"--cap", "/dms/volume/create",
+		"--cap", "/public",
+		"--cap", "/dms/deployment",
+		"--cap", "/broadcast",
+		"--topic", "/nunet",
+		"--expiry", time.Now().Add(1 * 365 * 24 * time.Hour).Format(time.DateOnly),
+	}
+	args = append(args, otherDID)
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -133,7 +152,25 @@ func (c *Client) delegate(t *testing.T, context, otherDID, passphrase string) st
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
-	args := []string{"cap", "delegate", "--context", context, "--cap", "/dms/tokenomics", "--cap", "/dms/tokenomics/contract/propose", "--cap", "/dms/tokenomics/contract/state", "--cap", "/dms/volume/create", "--cap", "/public", "--cap", "/dms/deployment", "--cap", "/broadcast", "--topic", "/nunet", "--expiry", "2026-12-31", otherDID}
+	args := []string{
+		"cap", "delegate", "--context", context,
+		"--cap", "/dms/tokenomics",
+		"--cap", "/dms/tokenomics/contract/payment",
+		"--cap", "/dms/tokenomics/contract/propose",
+		"--cap", "/dms/tokenomics/contract/state",
+		"--cap", "/dms/tokenomics/contract/chain/verify",
+		"--cap", "/dms/tokenomics/contract/transaction",
+		"--cap", "/dms/tokenomics/contract/transactions",
+		"--cap", "/dms/tokenomics/contract/payment/validation/request",
+		"--cap", "/dms/tokenomics/contract/info",
+		"--cap", "/dms/volume/create",
+		"--cap", "/public",
+		"--cap", "/dms/deployment",
+		"--cap", "/broadcast",
+		"--topic", "/nunet",
+		"--expiry", time.Now().Add(1 * 365 * 24 * time.Hour).Format(time.DateOnly),
+	}
+	args = append(args, otherDID)
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -245,6 +282,21 @@ func (c *Client) createContract(t *testing.T, contractFilePath, context, passphr
 	require.NoError(t, err)
 
 	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/create", "--contract-file", contractFilePath, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	return buf.String(), err
+}
+
+func (c *Client) createContractRemote(t *testing.T, contractFilePath, context, passphrase, remoteDID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/create", "--contract-file", contractFilePath, "--timeout", "5s", "--dest", remoteDID}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -620,6 +672,42 @@ func (c *Client) deploymentManifest(
 	return resp.Manifest, nil
 }
 
+func (c *Client) deploymentInfo(t *testing.T, context, passphrase, deploymentID string, includeUsage bool) (node.DeploymentInfoResponse, error) {
+	t.Helper()
+	var resp node.DeploymentInfoResponse
+
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	if err != nil {
+		return node.DeploymentInfoResponse{}, fmt.Errorf("failed to set env: %w", err)
+	}
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/node/deployment/info", "--id", deploymentID}
+	if includeUsage {
+		args = append(args, "--usage")
+	}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	if err != nil {
+		return node.DeploymentInfoResponse{}, fmt.Errorf("failed to execute deployment info command: %w", err)
+	}
+
+	err = json.Unmarshal(buf.Bytes(), &resp)
+	if err != nil {
+		return node.DeploymentInfoResponse{}, fmt.Errorf("unmarshal deployment info response: %w", err)
+	}
+
+	if resp.Error != "" {
+		return node.DeploymentInfoResponse{}, errors.New(resp.Error)
+	}
+
+	return resp, nil
+}
+
 func (c *Client) allocationsList(context, passphrase string) ([]jobs.AllocationInfo, error) {
 	var resp node.AllocationsListResponse
 
@@ -842,5 +930,69 @@ func (c *Client) debugFlightrec(t *testing.T, context, passphrase string) (strin
 	root.SetOutput(&buf)
 	err = root.Execute()
 	fmt.Println("createVolume response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) getPaymentQuote(t *testing.T, context, passphrase, uniqueID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/payment/quote/get", "--unique-id", uniqueID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("getPaymentQuote response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) validatePaymentQuote(t *testing.T, context, passphrase, quoteID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/payment/quote/validate", "--quote-id", quoteID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("validatePaymentQuote response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) cancelPaymentQuote(t *testing.T, context, passphrase, quoteID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/payment/quote/cancel", "--quote-id", quoteID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("cancelPaymentQuote response: ", buf.String())
+	return buf.String(), err
+}
+
+func (c *Client) confirmLocalTransactionWithQuote(t *testing.T, context, passphrase, uniqueID, txHash, quoteID string) (string, error) {
+	root := c.newCommandCtx()
+
+	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
+	require.NoError(t, err)
+
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/transactions/confirm", "--unique-id", uniqueID, "--tx-hash", txHash, "--blockchain", "ETHEREUM", "--quote-id", quoteID, "--timeout", "5s"}
+	root.SetArgs(args)
+
+	var buf bytes.Buffer
+	root.SetOutput(&buf)
+	err = root.Execute()
+	fmt.Println("confirmLocalTransactionWithQuote response: ", buf.String())
 	return buf.String(), err
 }

@@ -19,6 +19,8 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/spf13/afero"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
@@ -80,6 +82,7 @@ type Orchestrator interface {
 	ActorPrivateKey() crypto.PrivKey
 	DeploymentSnapshot() jtypes.DeploymentSnapshot
 	AllocationInfo() map[string]jtypes.AllocationInfo
+	UpdateAllocationStatus()
 	Done() <-chan struct{}
 }
 
@@ -211,6 +214,15 @@ func (o *BasicOrchestrator) setStatus(status jtypes.DeploymentStatus) {
 		}
 		o.statusSubscribers = make(map[chan jtypes.DeploymentStatus]struct{})
 	}
+
+	// metrics
+	if m := observability.DeploymentStatus; m != nil {
+		m.Add(o.ctx, 1, metric.WithAttributes(
+			observability.AttrDID,
+			attribute.String("orchestratorID", o.id),
+			attribute.String("status", status.String()),
+		))
+	}
 }
 
 func (o *BasicOrchestrator) StatusChannel(ctx context.Context) <-chan jtypes.DeploymentStatus {
@@ -276,9 +288,10 @@ func (o *BasicOrchestrator) Deploy(expiry time.Time) error {
 
 	for _, v := range o.contracts {
 		evt := events.DeploymentStart{
-			EventBase:      events.EventBase{Type: events.DeploymentStartEvent},
-			DeploymentID:   o.manifest.ID,
-			OrchestratorID: o.id,
+			EventBase:       events.EventBase{Type: events.DeploymentStartEvent},
+			DeploymentID:    o.manifest.ID,
+			OrchestratorID:  o.id,
+			HeadContractDID: v.DID, // treat contrat as if head of contract chain, won't be taken into consideration in billing if contract is p2p
 		}
 		o.contractEventHandler.Push(eventhandler.Event{
 			ContractHostDID: v.Host,
@@ -553,17 +566,63 @@ deploy:
 		log.Infof("deployment successful")
 		o.setStatus(jtypes.DeploymentStatusRunning)
 
+		var allocated types.Resources
 		for idx, a := range o.Manifest().Allocations {
+			res := o.Config().V1.Allocations[a.ID].Resources
 			o.allocs[a.ID] = jtypes.AllocationInfo{
 				AllocationID:   a.ID,
 				HeartbeatSeq:   0,
 				Status:         a.Status,
 				HasHealthCheck: len(a.Healthcheck.Exec) != 0 && a.Healthcheck.Type != "",
-				ResourceLimit:  o.Config().V1.Allocations[a.ID].Resources,
+				ResourceLimit:  res,
 				DNSName:        a.DNSName,
 				IP:             o.SubnetManifest().IndexRoutingTable[idx],
 				ResourceUsage:  jtypes.AllocationResourceUsage{},
 				Timestamp:      time.Now().Unix(),
+			}
+
+			_ = allocated.RAM.Add(res.RAM)
+			_ = allocated.Disk.Add(res.Disk)
+			_ = allocated.CPU.Add(res.CPU)
+			_ = allocated.GPUs.Add(res.GPUs)
+		}
+
+		// metric
+		if m := observability.DeploymentSuccess; m != nil {
+			m.Add(o.ctx, 1, metric.WithAttributes(
+				observability.AttrDID,
+				// attribute.Int("allocations", len(o.Manifest().Allocations)),
+			))
+
+			if m := observability.DeploySuccessAllocations; m != nil {
+				m.Record(o.ctx, int64(len(o.Manifest().Allocations)), metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("orchestratorID", o.id),
+				))
+			}
+			if m := observability.DeploySuccessCPUCoresAssigned; m != nil {
+				m.Record(o.ctx, float64(allocated.CPU.Cores), metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("orchestratorID", o.id),
+				))
+			}
+			if m := observability.DeploySuccessRAMGBAssigned; m != nil {
+				m.Record(o.ctx, int64(allocated.RAM.SizeInGB()), metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("orchestratorID", o.id),
+				))
+			}
+			if m := observability.DeploySuccessDiskMBAssigned; m != nil {
+				m.Record(o.ctx, float64(allocated.Disk.Size/(1024.0*1024.0)), metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("orchestratorID", o.id),
+				))
+			}
+			if m := observability.DeploySuccessGPUCountAssigned; m != nil {
+				m.Record(o.ctx, int64(len(allocated.GPUs)), metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("orchestratorID", o.id),
+				))
 			}
 		}
 
@@ -716,6 +775,7 @@ func (o *BasicOrchestrator) updateManifest(m jtypes.EnsembleManifest) {
 	// might inherit map references of partial updates
 	o.manifest = m.Clone()
 	o.lock.Unlock()
+	o.UpdateAllocationStatus()
 }
 
 // monitorOnlyTaskManifest will be responsible for tearing down
@@ -773,6 +833,26 @@ func (o *BasicOrchestrator) AllocationInfo() map[string]jtypes.AllocationInfo {
 		allocsCopy[k] = v
 	}
 	return allocsCopy
+}
+
+func (o *BasicOrchestrator) UpdateAllocationStatus() {
+	manifest := o.Manifest()
+	if manifest.Allocations == nil {
+		return
+	}
+
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	for _, a := range manifest.Allocations {
+		if _, ok := o.allocs[a.ID]; !ok {
+			continue
+		}
+
+		allocInfo := o.allocs[a.ID]
+		allocInfo.Status = a.Status
+		o.allocs[a.ID] = allocInfo
+	}
 }
 
 func (o *BasicOrchestrator) RegisterBehaviors() error {
