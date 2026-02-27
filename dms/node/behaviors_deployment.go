@@ -714,9 +714,9 @@ func (n *Node) handleDeploymentInfo(msg actor.Envelope) {
 			}
 
 			if statsResp.OK && statsResp.Stats != nil {
-				usage[matchingAllocID] = statsResp.Stats
 				// Update allocation details with stats
 				if details, exists := resp.Allocations[matchingAllocID]; exists {
+					usage[matchingAllocID] = statsResp.Stats
 					details.ExecutorStats = statsResp.Stats
 					resp.Allocations[matchingAllocID] = details
 				}

@@ -237,6 +237,87 @@ func DeploymentAssertSubnet(suite *TestSuite) {
 	}
 }
 
+// DeploymentDeploymentInfoTest deploys two tasks and one service (each on its own node),
+// queries deployment info with usage, verifies the result, stops the deployment,
+// then queries again and verifies there is no usage after allocations have stopped.
+func DeploymentDeploymentInfoTest(suite *TestSuite) {
+	suite.Require().Len(suite.nodes, 4)
+	deployer := suite.nodes[0]
+	// nodes[1], nodes[2], nodes[3] are the three onboarded compute providers
+
+	ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "two-tasks-one-service.yaml")
+
+	// 1. Deploy
+	deploymentResult := deployer.client.deploy(
+		suite.T(), deployer.userContext, deployer.password,
+		ensemblePath, "2m",
+	)
+	suite.Contains(deploymentResult, `"Status": "OK"`)
+	ensembleID := extractEnsembleID(deploymentResult)
+
+	// 2. Wait until deployment is Running
+	suite.Require().Eventually(func() bool {
+		status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		if err != nil {
+			suite.T().Logf("Error getting deployment status: %v", err)
+			return false
+		}
+		suite.T().Log("Deployment status:", extractStatus(status))
+		return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+	}, 2*60*time.Second, 5*time.Second, "Deployment did not reach Running status")
+
+	time.Sleep(5 * time.Second)
+
+	// 3. Query deployment info with usage and verify result is sane
+	infoRunning, err := deployer.client.deploymentInfo(suite.T(), deployer.userContext, deployer.password, ensembleID, true)
+	suite.Require().NoError(err)
+	suite.Require().Empty(infoRunning.Error, "deployment info should have no error")
+	suite.Require().Equal(jobtypes.DeploymentStatusRunning.String(), infoRunning.Status)
+	suite.Require().NotNil(infoRunning.Manifest, "manifest should be present when running")
+	suite.Require().NotEmpty(infoRunning.Manifest.Allocations, "manifest should list allocations")
+	suite.Require().NotEmpty(infoRunning.Allocations, "allocations details should be present when running")
+	// With IncludeUsage=true we expect usage data for running allocations (may be empty for very fresh allocs)
+	suite.Require().True(
+		len(infoRunning.Allocations) >= 1,
+		"at least one allocation should be reported when deployment is running",
+	)
+
+	// 4. Stop the deployment
+	shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+	suite.Contains(shutdownRes, `"Error": ""`)
+
+	time.Sleep(10 * time.Second)
+
+	// 5. Wait until deployment reaches Completed
+	suite.Require().Eventually(func() bool {
+		status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		if err != nil {
+			suite.T().Logf("Error getting deployment status: %v", err)
+			return false
+		}
+		suite.T().Log("Deployment status after shutdown:", extractStatus(status))
+		return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+	}, 60*time.Second, 5*time.Second, "Deployment did not reach Completed status after shutdown")
+
+	time.Sleep(3 * time.Second)
+
+	// 6. Query deployment info again with usage; assert usage was not included since allocations were shut down
+	infoStopped, err := deployer.client.deploymentInfo(suite.T(), deployer.userContext, deployer.password, ensembleID, true)
+	suite.Require().NoError(err)
+	suite.Require().Empty(infoStopped.Error)
+	suite.Require().Equal(jobtypes.DeploymentStatusCompleted.String(), infoStopped.Status)
+
+	// Usage must not be included: allocations are shut down so there is nothing to report
+	suite.Require().Empty(infoStopped.Usage,
+		"usage should be empty after deployment has stopped and allocations are torn down",
+	)
+	for allocID, details := range infoStopped.Allocations {
+		suite.Require().Nil(details.ExecutorStats,
+			"allocation %q must not have ExecutorStats (usage) after shutdown", allocID,
+		)
+	}
+}
+
 //  3. assert running phase:
 //     3.1. allocations are running on the correct providers
 //     3.2. resources are allocated correctly
