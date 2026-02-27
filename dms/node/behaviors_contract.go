@@ -1084,6 +1084,19 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 		return
 	}
 
+	// if the transaction is a orchestration fee, add it to the orchestration fee metric
+	if feeType, ok := tx.Metadata["fee_type"].(string); ok && feeType == "orchestration" {
+		if m := observability.TxPaidFeesAmount; m != nil {
+			amount, err := strconv.ParseFloat(tx.Amount, 64)
+			if err == nil {
+				m.Add(n.ctx, amount, metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("ContractDID", tx.ContractDID),
+				))
+			}
+		}
+	}
+
 	// metric
 	if m := observability.TxPaidAmount; m != nil {
 		amount, err := strconv.ParseFloat(tx.Amount, 64)
@@ -1185,6 +1198,20 @@ func (n *Node) handleIncomingTransaction(msg actor.Envelope) {
 	if err != nil {
 		handleErr(fmt.Errorf("failed to insert transaction into the store: %w", err))
 		return
+	}
+
+	// if USDT, add to USD metric
+	if req.PricingCurrency == "USDT" {
+		// metric
+		if m := observability.TxCreatedUSDAmount; m != nil {
+			amount, err := strconv.ParseFloat(req.OriginalAmount, 64)
+			if err == nil {
+				m.Add(n.ctx, amount, metric.WithAttributes(
+					observability.AttrDID,
+					attribute.String("ContractDID", req.ContractDID),
+				))
+			}
+		}
 	}
 
 	// metric
