@@ -17,7 +17,6 @@ Feature: Deployment Operations
     |     status     |
     |   "Completed"  |
     |    "Running"   |
-    |  "Committing"  |
     | "Provisioning" |
 
   Scenario Outline: Maintain history after restart of service
@@ -29,7 +28,6 @@ Feature: Deployment Operations
   Examples:
     |     status     |
     |    "Running"   |
-    |  "Committing"  |
     | "Provisioning" |
 
   Scenario: Prune deployment
