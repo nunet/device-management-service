@@ -562,20 +562,20 @@ func shouldReceiveDeploymentInfoFromStore(ctx context.Context, _ string) error {
 	return nil
 }
 
-func allocationsShouldBeEmptyOrMinimal(ctx context.Context) error {
-	t := godog.T(ctx)
-	tc := utils.NewTestCtx(ctx)
+// func allocationsShouldBeEmptyOrMinimal(ctx context.Context) error { // nolint:unused
+// 	t := godog.T(ctx)
+// 	tc := utils.NewTestCtx(ctx)
 
-	info, err := tc.DeploymentInfo()
-	require.NoError(t, err)
-	assert.NotNil(t, info)
+// 	info, err := tc.DeploymentInfo()
+// 	require.NoError(t, err)
+// 	assert.NotNil(t, info)
 
-	// For non-running deployments, allocations might be empty or contain minimal info
-	// We just verify the field exists - it can be empty for completed deployments
-	assert.Nil(t, info.Allocations)
+// 	// For non-running deployments, allocations might be empty or contain minimal info
+// 	// We just verify the field exists - it can be empty for completed deployments
+// 	assert.Nil(t, info.Allocations)
 
-	return nil
-}
+// 	return nil
+// }
 
 func prunesTheDeployment(ctx context.Context, spName string) (context.Context, error) {
 	t := godog.T(ctx)
