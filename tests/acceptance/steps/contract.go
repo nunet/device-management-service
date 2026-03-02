@@ -120,6 +120,8 @@ func requestsAContractWithThrough(ctx context.Context, spName, cpName, chName st
 	req.ContractParticipants.Requestor.URI = spDmsCtx.DID
 	req.Duration.StartDate = time.Now()
 	req.Duration.EndDate = time.Now().AddDate(0, 0, 1)
+	req.PaymentDetails.PaymentModel = contracts.PayPerAllocation
+	req.PaymentDetails.FeePerAllocation = "0.01"
 
 	contractContent, err := json.Marshal(req)
 	assert.NoError(t, err)
@@ -382,6 +384,8 @@ func createsUnrelatedContractWithThrough(ctx context.Context, spName, cpName, ch
 	req.ContractParticipants.Requestor.URI = spDmsCtx.DID
 	req.Duration.StartDate = time.Now()
 	req.Duration.EndDate = time.Now().AddDate(0, 0, 1)
+	req.PaymentDetails.PaymentModel = contracts.PayPerAllocation
+	req.PaymentDetails.FeePerAllocation = "0.01"
 
 	contractContent, err := json.Marshal(req)
 	assert.NoError(t, err)
