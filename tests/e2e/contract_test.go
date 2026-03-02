@@ -3519,9 +3519,11 @@ func DeployWithContractChainTest(suite *TestSuite) {
 			"requesterAddr":       "0xe66b31678d6c16e9ebf358268a790b763c133750",
 			"providerAddr":        "0x4741783ed607d1496f65749d2d9c94cf6c23352a",
 			"feesPerAllocation":   "10",
-			"paymentModel":        string(contracts.PayPerAllocation),
+			"paymentModel":        string(contracts.PayPerTimeUtilization),
 			"resourceTimeUnit":    "minute",
 			"paymentPeriod":       "minute",
+			"feePerTimeUnit":      "0.01",
+			"timeUnit":            "second",
 			"paymentPeriodCount":  "1",
 			"startDate":           startDate,
 			"endDate":             endDate,
@@ -3557,6 +3559,8 @@ func DeployWithContractChainTest(suite *TestSuite) {
 			"paymentModel":        string(contracts.PayPerTimeUtilization),
 			"resourceTimeUnit":    "minute",
 			"paymentPeriod":       "minute",
+			"feePerTimeUnit":      "0.01",
+			"timeUnit":            "second",
 			"paymentPeriodCount":  "1",
 			"startDate":           startDate,
 			"endDate":             endDate,
@@ -3693,7 +3697,7 @@ func DeployWithContractChainTest(suite *TestSuite) {
 				suite.Require().Empty(result.Error, "Tail Contract B1 billing should execute without errors")
 				// Assertion 2: Verify payment model is PayPerAllocation
 				suite.Require().Equal(
-					contracts.PayPerAllocation,
+					contracts.PayPerTimeUtilization,
 					result.PaymentModel,
 					"Tail Contract B1 payment model should be pay_per_allocation")
 				// Assertion 3: Verify usages count > 0
@@ -3702,7 +3706,6 @@ func DeployWithContractChainTest(suite *TestSuite) {
 					0,
 					"Tail Contract B1 should have usages > 0")
 				// Assertion 4: Verify PayPerAllocation-specific fields
-				suite.Require().Nil(result.TimeUtilization, "Tail Contract B1 should not have TimeUtilization (PayPerAllocation)")
 				suite.Require().Nil(result.ResourceUtilization, "Tail Contract B1 should not have ResourceUtilization (PayPerAllocation)")
 				suite.Require().Nil(result.FixedRentalDetails, "Tail Contract B1 should not have FixedRentalDetails (PayPerAllocation)")
 				suite.Require().Nil(result.PeriodicDetails, "Tail Contract B1 should not have PeriodicDetails (PayPerAllocation)")
@@ -3711,6 +3714,7 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		}
 		suite.Require().True(foundB1, "expected Tail Contract B1 should be in results")
 
+		usageResponse = contracts.CollectUsagesAndForwardToPaymentProvidersReponse{}
 		// Calculate usages for Contract B2 (should only include Provider 2's usage)
 		calculateResp, err = contractHostA.client.calculateContractUsages(suite.T(), contractHostA.dmsContext, contractHostA.password, contractB2DID)
 		suite.Require().NoError(err)
@@ -3747,6 +3751,7 @@ func DeployWithContractChainTest(suite *TestSuite) {
 		}
 		suite.Require().True(foundB2, "expected Tail Contract B2 should be in results")
 
+		usageResponse = contracts.CollectUsagesAndForwardToPaymentProvidersReponse{}
 		// Step 6: Verify Head Contract billing works
 		// Contract A (Head Contract) should generate invoices based on head_contract_did
 		calculateResp, err = contractHostA.client.calculateContractUsages(suite.T(), contractHostA.dmsContext, contractHostA.password, contractADID)

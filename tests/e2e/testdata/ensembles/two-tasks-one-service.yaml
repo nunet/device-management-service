@@ -1,0 +1,82 @@
+# E2E fixture: two tasks and one service, each on its own node (3 nodes).
+# Used by DeploymentDeploymentInfoTest.
+version: "V1"
+
+allocations:
+  task-one:
+    type: task
+    executor: docker
+    resources:
+      cpu:
+        cores: 1
+      gpus: []
+      ram:
+        size: 1
+      disk:
+        size: 1
+    execution:
+      type: docker
+      image: busybox
+      args: ["sh", "-c", "echo 'Task one' && sleep 5"]
+    keys: []
+    provision: []
+    dns_name: taskone
+
+  task-two:
+    type: task
+    executor: docker
+    resources:
+      cpu:
+        cores: 1
+      gpus: []
+      ram:
+        size: 1
+      disk:
+        size: 1
+    execution:
+      type: docker
+      image: busybox
+      args: ["sh", "-c", "echo 'Task two' && sleep 5"]
+    keys: []
+    provision: []
+    dns_name: tasktwo
+
+  service-one:
+    type: service
+    executor: docker
+    resources:
+      cpu:
+        cores: 1
+      gpus: []
+      ram:
+        size: 1
+      disk:
+        size: 1
+    execution:
+      type: docker
+      image: nginxdemos/hello:plain-text
+      working_directory: /
+    keys: []
+    provision: []
+    healthcheck:
+      type: command
+      exec: ["nginx", "-t"]
+      response:
+        type: string
+        value: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok"
+    dns_name: serviceone
+
+nodes:
+  nodeA:
+    allocations:
+      - task-one
+  nodeB:
+    allocations:
+      - task-two
+  nodeC:
+    allocations:
+      - service-one
+    ports:
+      - private: 80
+        public: 50010
+        allocation: service-one
