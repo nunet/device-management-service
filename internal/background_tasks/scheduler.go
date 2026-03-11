@@ -96,10 +96,10 @@ func (s *Scheduler) Start() {
 
 func (s *Scheduler) checkAndDispatchTasks(currentTime time.Time) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	tasksToCheck := make([]*Task, len(s.tasks))
 	copy(tasksToCheck, s.tasks)
+	s.mu.Unlock()
 
 	sort.SliceStable(tasksToCheck, func(i, j int) bool {
 		if tasksToCheck[i].Priority != tasksToCheck[j].Priority {
