@@ -162,18 +162,47 @@ func (pp *paymentProcessorImpl) ProcessPaymentItems(
 		return nil // No fee item generated
 	}
 
-	// Process orchestration fee item using existing methods
-	// Save payment (reuses existing savePayment method)
-	if err := pp.savePayment(contract, feeItem); err != nil {
+	// Process orchestration fee item using existing methods.
+	// Save payment with addresses set so the payment validator can verify: it fetches ERC20/Cardano
+	// transfers to ProviderAddr and checks From == RequesterAddr. For orchestration fee the transfer
+	// is requestor -> orchestration recipient, so we must store RequesterAddr = payer, ProviderAddr = recipient.
+	var contractForSave *contracts.Contract
+	if contract.PaymentDetails.OrchestrationFee.RecipientAddress.RequesterAddr != "" ||
+		contract.PaymentDetails.OrchestrationFee.RecipientAddress.ProviderAddr != "" {
+		recipient := contract.PaymentDetails.OrchestrationFee.RecipientAddress
+		orchestrationRecipientAddr := recipient.ProviderAddr
+		if orchestrationRecipientAddr == "" {
+			orchestrationRecipientAddr = recipient.RequesterAddr
+		}
+		// Use contract requestor as payer; orchestration recipient as "provider" for validation (transfers TO this address).
+		var payerAddr string
+		for _, a := range contract.PaymentDetails.Addresses {
+			if a.Blockchain == recipient.Blockchain {
+				payerAddr = a.RequesterAddr
+				break
+			}
+		}
+		addrForValidation := types.PaymentAddressInfo{
+			Blockchain:    recipient.Blockchain,
+			Currency:      recipient.Currency,
+			RequesterAddr: payerAddr,
+			ProviderAddr:  orchestrationRecipientAddr,
+		}
+		copyForSave := *contract
+		copyForSave.PaymentDetails.Addresses = []types.PaymentAddressInfo{addrForValidation}
+		contractForSave = &copyForSave
+	} else {
+		contractForSave = contract
+	}
+	if err := pp.savePayment(contractForSave, feeItem); err != nil {
 		log.Errorf("failed to save orchestration fee payment: %v", err)
 		return nil // Don't fail - primary transactions already processed
 	}
 
 	// Forward transaction - create temporary contract copy with modified addresses if needed
 	tempContract := *contract
-
-	// Use orchestration fee recipient address if specified, otherwise use contract addresses
-	if contract.PaymentDetails.OrchestrationFee.RecipientAddress.RequesterAddr != "" {
+	if contract.PaymentDetails.OrchestrationFee.RecipientAddress.RequesterAddr != "" ||
+		contract.PaymentDetails.OrchestrationFee.RecipientAddress.ProviderAddr != "" {
 		tempContract.PaymentDetails.Addresses = []types.PaymentAddressInfo{
 			contract.PaymentDetails.OrchestrationFee.RecipientAddress,
 		}
