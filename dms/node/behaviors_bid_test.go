@@ -305,6 +305,40 @@ func TestHandleBidRequest(t *testing.T) {
 		assert.Len(t, node.answeredBids, 1)
 		assert.Len(t, node.bids, 1)
 	})
+
+	t.Run("contracts required but bid request from self", func(t *testing.T) {
+		t.Parallel()
+
+		node, _, _ := newMockNodeWithSender(t, behaviors.BidRequestBehavior)
+
+		// mark node as onboarded so it can normally bid
+		mockOnboarding(t, node, MockTotalCPU/2, MockTotalRAM/2, MockTotalDisk/2)
+
+		// enable contract enforcement
+		node.dmsConfig.Job.RequireContractsForDeployment = true
+
+		// standard bid request from helper has no contracts
+		bidRequest := getBidRequest()
+		require.Len(t, bidRequest.Request, 1)
+		require.Nil(t, bidRequest.Request[0].V1.Contracts)
+
+		msg, err := actor.Message(
+			node.actor.Handle(), // self as sender
+			node.actor.Handle(), // self as receiver
+			behaviors.BidRequestBehavior,
+			bidRequest,
+			actor.WithMessageReplyTo(behaviors.BidReplyBehavior),
+			actor.WithMessageExpiry(uint64(time.Now().Add(time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		node.handleBidRequest(msg)
+
+		// enforcement enabled but since request is from self, the node should go
+		// through with hanlding the bid request
+		assert.NotEmpty(t, node.answeredBids)
+		assert.NotEmpty(t, node.bids)
+	})
 }
 
 func getBidRequest() jobtypes.EnsembleBidRequest {
