@@ -288,7 +288,9 @@ func (n *Node) handleBidRequest(msg actor.Envelope) {
 		))
 	}
 
-	if n.dmsConfig.Job.RequireContractsForDeployment {
+	// contract not required if from self
+	if n.actor.Handle().Address.HostID != msg.From.Address.HostID &&
+		n.dmsConfig.Job.RequireContractsForDeployment {
 		// contracts are global at ensemble level so they apply to all nodes
 		if len(request.Request) > 0 {
 			if len(request.Request[0].V1.Contracts) == 0 {
