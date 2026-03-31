@@ -21,6 +21,8 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+const NTXCurrency = "NTX"
+
 // PaymentProcessor defines the interface for processing payment items.
 // This interface allows for different implementations and easy testing.
 type PaymentProcessor interface {
@@ -220,13 +222,29 @@ func (pp *paymentProcessorImpl) ProcessPaymentItems(
 
 // savePayment saves a payment to the payment store
 func (pp *paymentProcessorImpl) savePayment(contract *contracts.Contract, item *contracts.PaymentItem) error {
-	return pp.paymentStore.Insert(payment.Payment{
+	paymnt := payment.Payment{
 		UniqueID: item.UniqueID,
 		Contract: *contract,
 		Usages:   item.Usages,
 		Amount:   item.Amount,
 		Paid:     false,
-	})
+
+		ToAddress: contract.PaymentDetails.Addresses,
+	}
+
+	// If pricing_currency is set, store original amount and conversion metadata
+	// NO CONVERSION HAPPENS HERE - conversion only happens at quote time
+	if contract.PaymentDetails.PricingCurrency != "" &&
+		contract.PaymentDetails.PricingCurrency != NTXCurrency {
+		// Store original amount in pricing currency (e.g., USDT)
+		// The Amount field contains the original amount in pricing currency
+		// Conversion to NTX will happen later when user requests a quote
+		paymnt.OriginalAmount = item.Amount
+		paymnt.PricingCurrency = contract.PaymentDetails.PricingCurrency
+		paymnt.RequiresConversion = true
+	}
+
+	return pp.paymentStore.Insert(paymnt)
 }
 
 // forwardTransaction forwards a transaction request to the service provider
@@ -248,7 +266,7 @@ func (pp *paymentProcessorImpl) forwardTransaction(
 	// If pricing_currency is set, store original amount and conversion metadata
 	// NO CONVERSION HAPPENS HERE - conversion only happens at quote time
 	if contract.PaymentDetails.PricingCurrency != "" &&
-		contract.PaymentDetails.PricingCurrency != "NTX" {
+		contract.PaymentDetails.PricingCurrency != NTXCurrency {
 		// Store original amount in pricing currency (e.g., USDT)
 		// The Amount field contains the original amount in pricing currency
 		// Conversion to NTX will happen later when user requests a quote

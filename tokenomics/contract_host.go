@@ -320,10 +320,12 @@ func (c *ContractActor) handleContractEvents(msg actor.Envelope) {
 
 	var req contracts.ContractEventRequest
 	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		log.Errorf("handleContractEvents: failed to unmarshal ContractEventRequest: %v", err)
 		resp.Error = err.Error()
 		c.sendReply(msg, resp)
 		return
 	}
+	log.Infof("handleContractEvents: received contract event request")
 
 	// Extract event type, provider DID, and Head Contract DID
 	var eventType events.EventType
@@ -342,11 +344,15 @@ func (c *ContractActor) handleContractEvents(msg actor.Envelope) {
 		if hcDid, ok := eventMap["head_contract_did"].(string); ok {
 			headContractDID = hcDid
 		}
+		log.Infof("handleContractEvents: extracted eventType=%s, providerDID=%s, headContractDID=%s from payload", eventType, providerDID, headContractDID)
+	} else {
+		log.Infof("handleContractEvents: could not unmarshal event payload as map: %v", err)
 	}
 
 	// If not in payload, use message sender (for backwards compatibility)
 	if providerDID == "" {
 		providerDID = msg.From.DID.String()
+		log.Infof("handleContractEvents: providerDID not found in payload, using sender DID: %s", providerDID)
 	}
 
 	// Store with event_type, provider_did, and head_contract_did
@@ -358,11 +364,13 @@ func (c *ContractActor) handleContractEvents(msg actor.Envelope) {
 		Data:            req.Payload,
 	})
 	if err != nil {
+		log.Errorf("handleContractEvents: failed to add usage event: %v", err)
 		resp.Error = err.Error()
 		c.sendReply(msg, resp)
 		return
 	}
 
+	log.Infof("handleContractEvents: usage event stored successfully for contract %s", c.ContractDID.URI)
 	c.sendReply(msg, resp)
 }
 

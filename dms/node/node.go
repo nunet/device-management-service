@@ -1580,55 +1580,69 @@ func (n *Node) invokeBehaviour(destination actor.Handle, behavior string, payloa
 }
 
 func (n *Node) handleContractEvents(event eventhandler.Event) error {
+	log.Infof("handleContractEvents: contractHost: %s , contractDID: %s, payload: %+v",
+		event.ContractHostDID, event.ContractDID, event.Payload)
 	hostDID, err := did.FromString(event.ContractHostDID)
 	if err != nil {
+		log.Errorf("handleContractEvents: failed to get contracts host did: %v", err)
 		return fmt.Errorf("failed to get contracts host did: %w", err)
 	}
 	pubKey, err := did.PublicKeyFromDID(hostDID)
 	if err != nil {
+		log.Errorf("handleContractEvents: failed to get contracts host public key from did: %v", err)
 		return fmt.Errorf("failed to get contracts host public key from did: %w", err)
 	}
 
 	pid, err := peer.IDFromPublicKey(pubKey)
 	if err != nil {
+		log.Errorf("handleContractEvents: failed to get peer id: %v", err)
 		return fmt.Errorf("failed to get peer id: %w", err)
 	}
 
 	// get actor public key
 	contractActorDID, err := did.FromString(event.ContractDID)
 	if err != nil {
+		log.Errorf("handleContractEvents: failed to get contracts actor did: %v", err)
 		return fmt.Errorf("failed to get contracts actor did: %w", err)
 	}
 	pubKeyContractActor, err := did.PublicKeyFromDID(contractActorDID)
 	if err != nil {
+		log.Errorf("handleContractEvents: failed to get contracts actor public key from did: %v", err)
 		return fmt.Errorf("failed to get contracts actor public key from did: %w", err)
 	}
 
 	destination, err := actor.HandleFromPublicKeyWithInboxAddress(pubKeyContractActor, event.ContractDID, pid.String())
 	if err != nil {
+		log.Errorf("handleContractEvents: failed to get contracts host handle: %v", err)
 		return fmt.Errorf("failed to get contracts host handle: %w", err)
 	}
 
 	bts, err := json.Marshal(event.Payload)
 	if err != nil {
+		log.Errorf("handleContractEvents: failed to marshal event object: %v", err)
 		return fmt.Errorf("failed to marshal event object: %w", err)
 	}
 
 	req := contracts.ContractEventRequest{
 		Payload: bts,
 	}
-	reply, err := n.invokeBehaviour(destination, behaviors.ContractEventsBehavior, req, invokeMessageTimeout)
+
+	log.Infof("handleContractEvents: invoking behavior %q - destination handle: %+v", behaviors.ContractEventsBehavior, &destination)
+	reply, err := n.invokeBehaviour(destination, behaviors.ContractEventsBehavior, req, time.Minute)
 	if err != nil {
+		log.Errorf("handleContractEvents: failed to invoke contract actor with event - error: %v", err)
 		return fmt.Errorf("failed to send message to contract host: %w", err)
 	}
 
 	var respEnvelope contracts.ContractEventResponse
 	err = json.Unmarshal(reply.Message, &respEnvelope)
 	if err != nil {
+		log.Errorf("handleContractEvents: failed to unmarshal contract hosts response payload: %v", err)
 		return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)
 	}
 
 	if respEnvelope.Error != "" {
+		log.Errorf("handleContractEvents: contract host returned error in response: %s", respEnvelope.Error)
 		return fmt.Errorf("failed to process contract event: %s", respEnvelope.Error)
 	}
 

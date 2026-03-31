@@ -123,52 +123,70 @@ func (n *Node) verifyContract(bidContracts map[string]types.ContractConfig, orch
 
 // verifyP2PContract performs traditional P2P contract verification
 func (n *Node) verifyP2PContract(contractConfig types.ContractConfig) error {
+	log.Infof("verifyP2PContract: parsing host DID")
 	hostDID, err := did.FromString(contractConfig.Host)
 	if err != nil {
+		log.Errorf("verifyP2PContract: failed to get contracts host did: %v", err)
 		return fmt.Errorf("failed to get contracts host did: %w", err)
 	}
 
+	log.Infof("verifyP2PContract: extracting host public key from DID")
 	pubKey, err := did.PublicKeyFromDID(hostDID)
 	if err != nil {
+		log.Errorf("verifyP2PContract: failed to get contracts host public key from did: %v", err)
 		return fmt.Errorf("failed to get contracts host public key from did: %w", err)
 	}
 
+	log.Infof("verifyP2PContract: getting peer ID from public key")
 	pid, err := peer.IDFromPublicKey(pubKey)
 	if err != nil {
+		log.Errorf("verifyP2PContract: failed to get peer id: %v", err)
 		return fmt.Errorf("failed to get peer id: %w", err)
 	}
 
+	log.Infof("verifyP2PContract: parsing contract actor DID")
 	contractActorDID, err := did.FromString(contractConfig.DID)
 	if err != nil {
+		log.Errorf("verifyP2PContract: failed to get contracts actor did: %v", err)
 		return fmt.Errorf("failed to get contracts actor did: %w", err)
 	}
 
+	log.Infof("verifyP2PContract: extracting contract actor public key from DID")
 	pubKeyContractActor, err := did.PublicKeyFromDID(contractActorDID)
 	if err != nil {
+		log.Errorf("verifyP2PContract: failed to get contracts actor public key from did: %v", err)
 		return fmt.Errorf("failed to get contracts actor public key from did: %w", err)
 	}
 
+	log.Infof("verifyP2PContract: constructing destination handle")
 	destination, err := actor.HandleFromPublicKeyWithInboxAddress(pubKeyContractActor, contractConfig.DID, pid.String())
 	if err != nil {
+		log.Errorf("verifyP2PContract: failed to get contracts host handle: %v", err)
 		return fmt.Errorf("failed to get contracts host handle: %w", err)
 	}
 
+	log.Infof("verifyP2PContract: sending contract validation request")
 	req := contracts.ContractValidateRequest{ContractDID: contractConfig.DID}
 	reply, err := n.invokeBehaviour(destination, behaviors.ContractValidationBehavior, req, invokeMessageTimeout)
 	if err != nil {
+		log.Errorf("verifyP2PContract: failed to send message to contract host: %v", err)
 		return fmt.Errorf("failed to send message to contract host: %w", err)
 	}
 
+	log.Infof("verifyP2PContract: unmarshalling contract host response")
 	var respEnvelope contracts.ContractValidateResponse
 	err = json.Unmarshal(reply.Message, &respEnvelope)
 	if err != nil {
+		log.Errorf("verifyP2PContract: failed to unmarshal contract hosts response payload: %v", err)
 		return fmt.Errorf("failed to unmarshal contract hosts response payload: %w", err)
 	}
 
 	if !respEnvelope.Valid {
+		log.Errorf("verifyP2PContract: contract is invalid")
 		return fmt.Errorf("contract is invalid")
 	}
 
+	log.Infof("verifyP2PContract: contract is valid")
 	return nil
 }
 

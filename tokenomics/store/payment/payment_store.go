@@ -18,6 +18,7 @@ import (
 	"github.com/ostafen/clover/v2/document"
 	"github.com/ostafen/clover/v2/query"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 const (
@@ -30,6 +31,11 @@ type Payment struct {
 	Usages   int                `json:"usages"`
 	Amount   string             `json:"amount"`
 	Paid     bool               `json:"paid"`
+
+	ToAddress          []types.PaymentAddressInfo `json:"to_address"`
+	OriginalAmount     string                     `json:"original_amount,omitempty"`     // Amount in pricing currency (USDT)
+	PricingCurrency    string                     `json:"pricing_currency,omitempty"`    // Currency of original amount (e.g., "USDT")
+	RequiresConversion bool                       `json:"requires_conversion,omitempty"` // True if conversion is needed
 }
 
 type Store struct {
