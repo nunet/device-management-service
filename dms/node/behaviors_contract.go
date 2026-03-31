@@ -798,6 +798,7 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 
 	// Check if there's a quote for this transaction
 	var expectedAmount string
+	var quoteToClaim *payment_quote.PaymentQuote
 	if req.QuoteID != "" {
 		// If quote_id is provided, get quote by ID
 		quote, err := n.paymentQuoteStore.GetQuote(req.QuoteID)
@@ -805,19 +806,16 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 			handleErr(fmt.Errorf("failed to get quote: %w", err))
 			return
 		}
-		if quote.Used {
-			expectedAmount = quote.ConvertedAmount
-		} else {
-			// Fallback to payment amount if quote not found or not used
-			expectedAmount = payment.Amount
-		}
+		expectedAmount = quote.ConvertedAmount
+		quoteToClaim = quote
 	} else {
-		// Try to find used quote by unique_id
+		// Try to find a quote by unique_id (GetQuoteByUniqueID returns only unused quotes)
 		quote, err := n.paymentQuoteStore.GetQuoteByUniqueID(req.UniqueID)
-		if quote != nil && quote.Used {
+		if quote != nil {
 			expectedAmount = quote.ConvertedAmount
-		} else if err != nil { // meaning no quote was used
-			// Fallback to payment amount (for backward compatibility)
+			quoteToClaim = quote
+		} else if err != nil {
+			// No quote for this transaction — fall back to nominal amount (non-conversion path)
 			expectedAmount = payment.Amount
 		}
 	}
@@ -910,38 +908,41 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 			n.dmsConfig.PaymentProvider.BlockFrostAPIURL,
 		)
 		asset := n.dmsConfig.PaymentProvider.CardanoAssetPolicyID + hex.EncodeToString([]byte(n.dmsConfig.PaymentProvider.CardanoAssetName))
-		txs, err := client.FindTxsToAddressForAsset(n.ctx, asset, cardanoAddr.ProviderAddr)
-		if err != nil {
-			handleErr(fmt.Errorf("failed to get cardano transactions: %w", err))
-			return
-		}
 
-		for _, tx := range txs {
-			if strings.EqualFold(tx.TxHash, req.TxHash) {
-				foundFrom := false
-				for _, v := range tx.FromAddrs {
-					if v == cardanoAddr.RequesterAddr {
-						foundFrom = true
-						break
-					}
-				}
+		ctxT, cancel := context.WithTimeout(n.ctx, 30*time.Second)
+		defer cancel()
 
-				if !foundFrom {
-					handleErr(fmt.Errorf("requester transaction address not found: %s", cardanoAddr.RequesterAddr))
-					return
-				}
+		transfers := client.ComputeTransfersForAsset(ctxT, req.TxHash, asset)
+		for _, trsfr := range transfers {
+			if trsfr.From != cardanoAddr.RequesterAddr {
+				handleErr(fmt.Errorf("requester transaction address not found: %s", cardanoAddr.RequesterAddr))
+			}
 
-				ok, err := compareDecimals(tx.Quantity, expectedAmount)
-				if err != nil {
-					errorMsg = err.Error() + " tx amount: " + tx.Quantity + " expected amount: " + expectedAmount
-				}
-				if ok {
-					verified = true
-				} else {
-					errorMsg = "not verified: tx amount: " + tx.Quantity + " expected amount: " + expectedAmount
-				}
+			if trsfr.To != cardanoAddr.ProviderAddr {
+				handleErr(fmt.Errorf("provider transaction address not found: %s", cardanoAddr.ProviderAddr))
+			}
 
-				break
+			amount := ""
+			for _, a := range trsfr.Assets {
+				if a.Unit == asset {
+					amount = a.Quantity.String()
+					break
+				}
+			}
+			ok, err := compareDecimals(amount, expectedAmount)
+			if err != nil {
+				errorMsg = fmt.Sprintf(
+					"error: %v - tx amount: %s expected amount: %s",
+					err.Error(), amount, expectedAmount,
+				)
+			}
+			if ok {
+				verified = true
+			} else {
+				errorMsg = fmt.Sprintf(
+					"not verified: tx amount: %s expected amount: %s",
+					amount, expectedAmount,
+				)
 			}
 		}
 
@@ -956,6 +957,9 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 		err := n.paymentStore.Update(payment)
 		if err != nil {
 			resp.Error = err.Error()
+		}
+		if quoteToClaim != nil {
+			_ = n.paymentQuoteStore.MarkQuoteAsUsed(quoteToClaim.QuoteID)
 		}
 	} else {
 		if errorMsg != "" {
@@ -991,27 +995,6 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 		return
 	}
 	contractID = paymentProviderDID
-
-	// If quote_id is provided, validate and mark as used
-	if req.QuoteID != "" {
-		// Validate quote is still valid (not expired, not used)
-		quote, err := n.paymentQuoteStore.ValidateQuote(req.QuoteID)
-		if err != nil {
-			handleErr(fmt.Errorf("quote validation failed: %w", err))
-			return
-		}
-
-		if quote.UniqueID != req.UniqueID {
-			handleErr(fmt.Errorf("quote does not match transaction"))
-			return
-		}
-
-		// Mark quote as used
-		if err := n.paymentQuoteStore.MarkQuoteAsUsed(req.QuoteID); err != nil {
-			handleErr(fmt.Errorf("failed to mark quote as used: %w", err))
-			return
-		}
-	}
 
 	paymentValidationReq := contracts.ContractPaymentValidationRequest{
 		TxHash:     req.TxHash,
@@ -1499,14 +1482,14 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 	}
 
 	// Get transaction
-	tx, err := n.transactionStore.GetTransactionByUniqueID(req.UniqueID)
+	payM, err := n.paymentStore.GetByUniqueID(req.UniqueID)
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get transaction: %w", err))
 		return
 	}
 
 	// Check if conversion is needed
-	if !tx.RequiresConversion || tx.PricingCurrency == "" {
+	if !payM.RequiresConversion || payM.PricingCurrency == "" {
 		handleErr(fmt.Errorf("transaction does not require conversion"))
 		return
 	}
@@ -1524,8 +1507,8 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 
 	// Get payment currency from transaction addresses
 	paymentCurrency := "NTX"
-	if len(tx.ToAddress) > 0 {
-		paymentCurrency = tx.ToAddress[0].Currency
+	if len(payM.ToAddress) > 0 {
+		paymentCurrency = payM.ToAddress[0].Currency
 	}
 
 	// Perform real-time conversion
@@ -1541,14 +1524,14 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 		return
 	}
 
-	convertedAmount, err := oracle.ConvertAmount(ctx, tx.OriginalAmount, tx.PricingCurrency, paymentCurrency)
+	convertedAmount, err := oracle.ConvertAmount(ctx, payM.OriginalAmount, payM.PricingCurrency, paymentCurrency)
 	if err != nil {
 		handleErr(fmt.Errorf("failed to convert amount: %w", err))
 		return
 	}
 
 	// Get exchange rate
-	rate, err := oracle.GetPrice(ctx, tx.PricingCurrency, paymentCurrency)
+	rate, err := oracle.GetPrice(ctx, payM.PricingCurrency, paymentCurrency)
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get exchange rate: %w", err))
 		return
@@ -1558,7 +1541,7 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 	quoteID := fmt.Sprintf("quote_%s_%d", req.UniqueID, time.Now().UnixNano())
 
 	// Get quote TTL from config (default: 2 minutes)
-	quoteTTL := 2 * time.Minute
+	quoteTTL := 10 * time.Minute
 	if n.dmsConfig.CoinMarketCap.QuoteTTL != "" {
 		if parsedTTL, err := time.ParseDuration(n.dmsConfig.CoinMarketCap.QuoteTTL); err == nil {
 			quoteTTL = parsedTTL
@@ -1569,9 +1552,9 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 	quote := payment_quote.PaymentQuote{
 		QuoteID:         quoteID,
 		UniqueID:        req.UniqueID,
-		OriginalAmount:  tx.OriginalAmount,
+		OriginalAmount:  payM.OriginalAmount,
 		ConvertedAmount: convertedAmount,
-		PricingCurrency: tx.PricingCurrency,
+		PricingCurrency: payM.PricingCurrency,
 		PaymentCurrency: paymentCurrency,
 		ExchangeRate:    fmt.Sprintf("%.8f", rate),
 		CreatedAt:       time.Now(),
@@ -1588,9 +1571,9 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 	// Return response
 	resp := contracts.ContractGetPaymentQuoteResponse{
 		QuoteID:         quoteID,
-		OriginalAmount:  tx.OriginalAmount,
+		OriginalAmount:  payM.OriginalAmount,
 		ConvertedAmount: convertedAmount,
-		PricingCurrency: tx.PricingCurrency,
+		PricingCurrency: payM.PricingCurrency,
 		PaymentCurrency: paymentCurrency,
 		ExchangeRate:    fmt.Sprintf("%.8f", rate),
 		ExpiresAt:       quote.ExpiresAt,
