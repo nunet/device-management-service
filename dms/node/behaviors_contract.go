@@ -533,6 +533,124 @@ func (n *Node) handleContractApprovalLocal(msg actor.Envelope) {
 	})
 }
 
+// listIncomingContractsFromSolutionEnablers aggregates incoming contracts from every unique
+// solution enabler DID in allContracts. Local root merges filteredLocal; other hosts get
+// ContractListBehavior. filteredLocal should be filterContractsByRole(allContracts, req.Role, callerDID).
+func (n *Node) listIncomingContractsFromSolutionEnablers(
+	allContracts []*contracts.Contract,
+	req contracts.ContractListIncomingRequest,
+	callerDID string,
+	filteredLocal []*contracts.Contract,
+) ([]*contracts.Contract, error) {
+	rootDID := n.rootCap.DID().String()
+	solutionHosts := uniqueSolutionEnablerDIDs(allContracts)
+	if len(solutionHosts) == 0 {
+		log.Warnf("no solution hosts found (i.e: no contracts created yet) for caller %s", callerDID)
+		return nil, fmt.Errorf("no solution hosts found to retrieve contracts from for caller %s", callerDID)
+	}
+
+	aggregated := make(map[string]*contracts.Contract, len(filteredLocal))
+
+	for _, hostDID := range solutionHosts {
+		if hostDID == "" {
+			continue
+		}
+
+		// if the solution enabler is this node, use local data
+		if hostDID == rootDID {
+			for _, c := range filteredLocal {
+				aggregated[c.ContractDID] = c
+			}
+			continue
+		}
+
+		handle, err := actor.HandleFromDID(hostDID)
+		if err != nil {
+			log.Warnf("failed to build handle for host %s: %v", hostDID, err)
+			continue
+		}
+
+		reply, err := n.invokeBehaviour(handle, behaviors.ContractListBehavior, req, invokeMessageTimeout)
+		if err != nil || reply.Message == nil {
+			log.Warnf("failed to invoke list incoming on host %s: %v", hostDID, err)
+			continue
+		}
+
+		var remoteResp contracts.ContractListIncomingResponse
+		if err := json.Unmarshal(reply.Message, &remoteResp); err != nil {
+			log.Warnf("failed to decode contract host response %s: %v", hostDID, err)
+			continue
+		}
+		if remoteResp.Error != "" {
+			log.Warnf("host %s returned error listing incoming contracts: %s", hostDID, remoteResp.Error)
+			continue
+		}
+
+		for _, c := range remoteResp.Contracts {
+			aggregated[c.ContractDID] = c
+		}
+	}
+
+	contractsSlice := make([]*contracts.Contract, 0, len(aggregated))
+	for _, c := range aggregated {
+		contractsSlice = append(contractsSlice, c)
+	}
+
+	return contractsSlice, nil
+}
+
+// FindTailContract resolves the tail contract for a head contract: it loads contracts from the
+// local store (to discover solution enablers), aggregates lists from solution enablers via
+// listIncomingContractsFromSolutionEnablers, then applies tail selection using store.FindTailContractFromContracts.
+// If there are no solution enablers in the local view, it falls back to tail matching on the local DB only.
+func (n *Node) FindTailContract(
+	headContractConfig types.ContractConfig,
+	computeProviderDID string,
+) (*types.ContractConfig, error) {
+	log.Infof("find_tail_contract: start head_did=%s head_provider=%s compute_provider=%s",
+		headContractConfig.DID, headContractConfig.Provider, computeProviderDID)
+
+	allContracts, err := n.contractStore.GetAllContracts()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all contracts: %w", err)
+	}
+	log.Infof("find_tail_contract: loaded %d contract(s) from local store", len(allContracts))
+	for _, c := range allContracts {
+		log.Infof("find_tail_contract: contract %s: %+v", c.ContractDID, c)
+	}
+
+	req := contracts.ContractListIncomingRequest{
+		Role: contracts.ContractRoleProvider,
+	}
+	filteredLocal := filterContractsByRole(allContracts, req.Role, computeProviderDID)
+	log.Infof("find_tail_contract: provider-role filter for compute provider yields %d local contract(s); aggregating from solution enablers",
+		len(filteredLocal))
+
+	merged, err := n.listIncomingContractsFromSolutionEnablers(allContracts, req, computeProviderDID, filteredLocal)
+	if err != nil {
+		log.Infof("find_tail_contract: solution-enabler aggregation failed (%v); falling back to tail match on local DB only", err)
+		cfg, ferr := store.FindTailContractFromContracts(headContractConfig, computeProviderDID, allContracts)
+		if ferr != nil {
+			return nil, ferr
+		}
+		log.Infof("find_tail_contract: resolved tail from local DB fallback tail_did=%s tail_host=%s", cfg.DID, cfg.Host)
+		return cfg, nil
+	}
+
+	log.Infof("find_tail_contract: merged %d contract(s) from solution enablers (deduped)", len(merged))
+	for _, c := range merged {
+		log.Infof("find_tail_contract: merged contract %s: %+v", c.ContractDID, c)
+	}
+
+	cfg, err := store.FindTailContractFromContracts(headContractConfig, computeProviderDID, merged)
+	if err != nil {
+		return nil, err
+	}
+	log.Infof("find_tail_contract: success tail_did=%s tail_host=%s tail_provider=%s",
+		cfg.DID, cfg.Host, cfg.Provider)
+	return cfg, nil
+}
+
 // compute provider can list incoming contracts for approval
 func (n *Node) handleListIncomingContracts(msg actor.Envelope) {
 	defer msg.Discard()
@@ -561,57 +679,10 @@ func (n *Node) handleListIncomingContracts(msg actor.Envelope) {
 	filteredLocal := filterContractsByRole(allContracts, req.Role, callerDID)
 
 	if callerDID == rootDID {
-		solutionHosts := uniqueSolutionEnablerDIDs(allContracts)
-		if len(solutionHosts) == 0 {
-			log.Warnf("no solution hosts found (i.e: no contracts created yet) for caller %s", callerDID)
-			handleErr(fmt.Errorf("no solution hosts found to retrieve contracts from for caller %s", callerDID))
+		contractsSlice, err := n.listIncomingContractsFromSolutionEnablers(allContracts, req, callerDID, filteredLocal)
+		if err != nil {
+			handleErr(err)
 			return
-		}
-		aggregated := make(map[string]*contracts.Contract, len(filteredLocal))
-
-		for _, hostDID := range solutionHosts {
-			if hostDID == "" {
-				continue
-			}
-
-			// if the solution enabler is this node, use local data
-			if hostDID == rootDID {
-				for _, c := range filterContractsByRole(allContracts, req.Role, callerDID) {
-					aggregated[c.ContractDID] = c
-				}
-				continue
-			}
-
-			handle, err := actor.HandleFromDID(hostDID)
-			if err != nil {
-				log.Warnf("failed to build handle for host %s: %v", hostDID, err)
-				continue
-			}
-
-			reply, err := n.invokeBehaviour(handle, behaviors.ContractListBehavior, req, invokeMessageTimeout)
-			if err != nil || reply.Message == nil {
-				log.Warnf("failed to invoke list incoming on host %s: %v", hostDID, err)
-				continue
-			}
-
-			var remoteResp contracts.ContractListIncomingResponse
-			if err := json.Unmarshal(reply.Message, &remoteResp); err != nil {
-				log.Warnf("failed to decode contract host response %s: %v", hostDID, err)
-				continue
-			}
-			if remoteResp.Error != "" {
-				log.Warnf("host %s returned error listing incoming contracts: %s", hostDID, remoteResp.Error)
-				continue
-			}
-
-			for _, c := range remoteResp.Contracts {
-				aggregated[c.ContractDID] = c
-			}
-		}
-
-		contractsSlice := make([]*contracts.Contract, 0, len(aggregated))
-		for _, c := range aggregated {
-			contractsSlice = append(contractsSlice, c)
 		}
 
 		n.sendReply(msg, contracts.ContractListIncomingResponse{

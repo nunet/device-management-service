@@ -283,7 +283,7 @@ func New(cfg config.Config, fs afero.Afero,
 		return nil, fmt.Errorf("create node actor: %w", err)
 	}
 
-	allocator := newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID, contractStore)
+	allocator := newAllocator(vt, newPortAllocator(portConfig), resourceManager, hardware, net, fs, cfg.WorkDir, hostID)
 	ctx, cancel := context.WithCancel(context.Background())
 	n := &Node{
 		allocator:              allocator,
@@ -419,6 +419,8 @@ func New(cfg config.Config, fs afero.Afero,
 
 	// NOTE: Do NOT start billing scheduler here
 	// It will be started in Node.Start() method
+
+	allocator.setTailContractGetter(n)
 
 	return n, nil
 }
