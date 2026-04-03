@@ -26,7 +26,6 @@ import (
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume"
 	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
-	"gitlab.com/nunet/device-management-service/tokenomics/store"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
 )
@@ -266,7 +265,8 @@ type allocator struct {
 	cancel context.CancelFunc
 
 	volumeTracker *storage.VolumeTracker
-	contractStore *store.Store
+
+	tailContractGet jobs.TailContractGetter
 }
 
 var _ Allocator = (*allocator)(nil)
@@ -281,7 +281,6 @@ func newAllocator(
 	fs afero.Afero,
 	workDir,
 	hostID string,
-	contractStore *store.Store,
 ) *allocator {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &allocator{
@@ -298,8 +297,11 @@ func newAllocator(
 		ctx:                ctx,
 		cancel:             cancel,
 		volumeTracker:      vt,
-		contractStore:      contractStore,
 	}
+}
+
+func (a *allocator) setTailContractGetter(g jobs.TailContractGetter) {
+	a.tailContractGet = g
 }
 
 func (a *allocator) Run() error {
@@ -567,7 +569,7 @@ func (a *allocator) Allocate(
 		executor,
 		func() error { return a.Release(ctx, allocationID) },
 		contractEventHandler,
-		a.contractStore,
+		a.tailContractGet,
 		deploymentID,
 	)
 	if err != nil {

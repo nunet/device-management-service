@@ -252,38 +252,12 @@ func (s *Store) FindContractsByParticipant(participant did.DID) ([]*contracts.Co
 	return matches, nil
 }
 
-// FindTailContractConfig finds Tail Contracts and returns them as ContractConfig.
-// This method wraps FindTailContract to return ContractConfig format for use in jobs package.
-// Note: This method name matches the TailContractFinder interface from jobs package.
-func (s *Store) FindTailContract(
+// FilterTailContracts returns contracts that qualify as tail contracts for the given head
+// contract config and compute provider, using only the supplied contract list.
+func FilterTailContracts(
 	headContractConfig types.ContractConfig,
 	computeProviderDID string,
-) (*types.ContractConfig, error) {
-	tailContracts, err := s.findTailContracts(headContractConfig, computeProviderDID)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(tailContracts) == 0 {
-		return nil, fmt.Errorf("no tail contracts found")
-	}
-
-	if len(tailContracts) > 1 {
-		return nil, fmt.Errorf("multiple tail contracts found")
-	}
-
-	return &types.ContractConfig{
-		DID:      tailContracts[0].ContractDID,
-		Host:     tailContracts[0].SolutionEnablerDID.String(),
-		Provider: tailContracts[0].ContractParticipants.Provider.String(),
-	}, nil
-}
-
-// findTailContracts is the internal method that returns []*contracts.Contract.
-// This is used by FindTailContract to avoid naming conflicts.
-func (s *Store) findTailContracts(
-	headContractConfig types.ContractConfig,
-	computeProviderDID string,
+	contractList []*contracts.Contract,
 ) ([]*contracts.Contract, error) {
 	if headContractConfig.Provider == "" {
 		return nil, fmt.Errorf("head contract config is missing provider DID")
@@ -299,14 +273,8 @@ func (s *Store) findTailContracts(
 		return nil, fmt.Errorf("invalid compute provider DID: %w", err)
 	}
 
-	// Get all contracts
-	allContracts, err := s.GetAllContracts()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get all contracts: %w", err)
-	}
-
 	var tailContracts []*contracts.Contract
-	for _, contract := range allContracts {
+	for _, contract := range contractList {
 		// Skip the head contract itself (if it exists locally)
 		if contract.ContractDID == headContractConfig.DID {
 			continue
@@ -327,4 +295,29 @@ func (s *Store) findTailContracts(
 	}
 
 	return tailContracts, nil
+}
+
+func FindTailContractFromContracts(
+	headContractConfig types.ContractConfig,
+	computeProviderDID string,
+	contractList []*contracts.Contract,
+) (*types.ContractConfig, error) {
+	tailContracts, err := FilterTailContracts(headContractConfig, computeProviderDID, contractList)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(tailContracts) == 0 {
+		return nil, fmt.Errorf("no tail contracts found")
+	}
+
+	if len(tailContracts) > 1 {
+		return nil, fmt.Errorf("multiple tail contracts found")
+	}
+
+	return &types.ContractConfig{
+		DID:      tailContracts[0].ContractDID,
+		Host:     tailContracts[0].SolutionEnablerDID.String(),
+		Provider: tailContracts[0].ContractParticipants.Provider.String(),
+	}, nil
 }

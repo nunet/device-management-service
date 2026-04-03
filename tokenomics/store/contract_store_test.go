@@ -189,7 +189,9 @@ func TestFindTailContract_SingleTailContract(t *testing.T) {
 		DID:      "did:head:contract",
 		Provider: "did:org:123",
 	}
-	tailContractConfig, err := store.FindTailContract(headContractConfig, "did:provider:456")
+	allContracts, err := store.GetAllContracts()
+	require.NoError(t, err)
+	tailContractConfig, err := FindTailContractFromContracts(headContractConfig, "did:provider:456", allContracts)
 
 	require.NoError(t, err)
 	require.NotNil(t, tailContractConfig, "Should find exactly one Tail Contract")
@@ -235,7 +237,9 @@ func TestFindTailContract_MultipleTailContracts(t *testing.T) {
 		DID:      "did:head:contract",
 		Provider: "did:org:123",
 	}
-	_, err = store.FindTailContract(headContractConfig, "did:provider:456")
+	allContracts, err := store.GetAllContracts()
+	require.NoError(t, err)
+	_, err = FindTailContractFromContracts(headContractConfig, "did:provider:456", allContracts)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "multiple tail contracts found")
@@ -249,7 +253,9 @@ func TestFindTailContract_NoTailContractFound(t *testing.T) {
 		DID:      "did:head:contract",
 		Provider: "did:org:123",
 	}
-	tailContracts, err := store.FindTailContract(headContractConfig, "did:provider:456")
+	allContracts, err := store.GetAllContracts()
+	require.NoError(t, err)
+	tailContracts, err := FindTailContractFromContracts(headContractConfig, "did:provider:456", allContracts)
 
 	require.Error(t, err)
 	assert.Nil(t, tailContracts, "Should return nil when no Tail Contracts found")
@@ -263,7 +269,9 @@ func TestFindTailContract_InvalidHeadContractConfig(t *testing.T) {
 		DID: "did:head:contract",
 		// Provider is empty
 	}
-	_, err := store.FindTailContract(headContractConfig, "did:provider:456")
+	allContracts, err := store.GetAllContracts()
+	require.NoError(t, err)
+	_, err = FindTailContractFromContracts(headContractConfig, "did:provider:456", allContracts)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "head contract config is missing provider DID")
@@ -309,7 +317,9 @@ func TestFindTailContract_TailContractNotActive(t *testing.T) {
 		DID:      "did:head:contract",
 		Provider: "did:org:123",
 	}
-	tailContract, err := store.FindTailContract(headContractConfig, "did:provider:456")
+	allContracts, err := store.GetAllContracts()
+	require.NoError(t, err)
+	tailContract, err := FindTailContractFromContracts(headContractConfig, "did:provider:456", allContracts)
 
 	require.NoError(t, err)
 	require.NotNil(t, tailContract, "Should find only active Tail Contract")
@@ -356,7 +366,9 @@ func TestFindTailContract_HeadContractExistsLocally(t *testing.T) {
 		DID:      "did:head:contract", // Same DID as local Head Contract
 		Provider: "did:org:123",
 	}
-	tailContractConfig, err := store.FindTailContract(headContractConfig, "did:provider:456")
+	allContracts, err := store.GetAllContracts()
+	require.NoError(t, err)
+	tailContractConfig, err := FindTailContractFromContracts(headContractConfig, "did:provider:456", allContracts)
 
 	require.NoError(t, err)
 	require.NotNil(t, tailContractConfig, "Should find Tail Contract but skip Head Contract")
@@ -371,7 +383,9 @@ func TestFindTailContract_InvalidComputeProviderDID(t *testing.T) {
 		DID:      "did:head:contract",
 		Provider: "did:org:123",
 	}
-	_, err := store.FindTailContract(headContractConfig, "invalid-did")
+	allContracts, err := store.GetAllContracts()
+	require.NoError(t, err)
+	_, err = FindTailContractFromContracts(headContractConfig, "invalid-did", allContracts)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid compute provider DID")
