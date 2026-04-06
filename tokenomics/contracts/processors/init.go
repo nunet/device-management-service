@@ -9,9 +9,13 @@
 package processors
 
 import (
+	logging "github.com/ipfs/go-log/v2"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
 	"gitlab.com/nunet/device-management-service/tokenomics/store/usage"
 )
+
+// log is the logger for the docker package
+var log = logging.Logger("contract-processors")
 
 // InitPaymentModelProcessors initializes and registers all payment model processors.
 // This should be called during application startup.

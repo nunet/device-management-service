@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -54,6 +55,18 @@ type TxUtxoEntry struct {
 type AmountItem struct {
 	Unit     string `json:"unit"`
 	Quantity string `json:"quantity"`
+}
+
+// Int version of AmountItem
+type AssetAmount struct {
+	Unit     string
+	Quantity *big.Int
+}
+
+type Transfer struct {
+	From   string
+	To     string
+	Assets []AssetAmount
 }
 
 type Match struct {
@@ -288,4 +301,135 @@ collectLoop:
 		return nil, collectorErr
 	}
 	return matches, nil
+}
+
+func (b BFClient) ComputeTransfersForAsset(ctx context.Context, txHash, asset string) []Transfer {
+	// fetch tx utxos
+	tx, err := b.GetTxUtxos(ctx, txHash)
+	if err != nil {
+		return nil
+	}
+
+	inputs := make(map[string]*big.Int)
+	outputs := make(map[string]*big.Int)
+
+	parse := func(q string) *big.Int {
+		v, _ := new(big.Int).SetString(q, 10)
+		return v
+	}
+
+	// aggregate inputs and outputs
+	for _, in := range tx.Inputs {
+		for _, amt := range in.Amount {
+			if amt.Unit != asset {
+				continue
+			}
+			if _, ok := inputs[in.Address]; !ok {
+				inputs[in.Address] = big.NewInt(0)
+			}
+			inputs[in.Address].Add(inputs[in.Address], parse(amt.Quantity))
+		}
+	}
+
+	for _, out := range tx.Outputs {
+		for _, amt := range out.Amount {
+			if amt.Unit != asset {
+				continue
+			}
+			if _, ok := outputs[out.Address]; !ok {
+				outputs[out.Address] = big.NewInt(0)
+			}
+			outputs[out.Address].Add(outputs[out.Address], parse(amt.Quantity))
+		}
+	}
+
+	// compute net = outputs - inputs
+	net := make(map[string]*big.Int)
+	addresses := make(map[string]struct{})
+
+	for a := range inputs {
+		addresses[a] = struct{}{}
+	}
+	for a := range outputs {
+		addresses[a] = struct{}{}
+	}
+
+	for addr := range addresses {
+		in := big.NewInt(0)
+		out := big.NewInt(0)
+
+		if inputs[addr] != nil {
+			in = inputs[addr]
+		}
+		if outputs[addr] != nil {
+			out = outputs[addr]
+		}
+
+		net[addr] = new(big.Int).Sub(out, in)
+	}
+
+	// split senders/receivers
+	type node struct {
+		addr string
+		amt  *big.Int
+	}
+
+	var senders []node
+	var receivers []node
+
+	for addr, amt := range net {
+		if amt.Sign() < 0 {
+			senders = append(senders, node{
+				addr: addr,
+				amt:  new(big.Int).Abs(amt),
+			})
+		} else if amt.Sign() > 0 {
+			receivers = append(receivers, node{
+				addr: addr,
+				amt:  amt,
+			})
+		}
+	}
+
+	// build transfers
+	var transfers []Transfer
+
+	i, j := 0, 0
+	for i < len(senders) && j < len(receivers) {
+		s := senders[i]
+		r := receivers[j]
+
+		amt := new(big.Int)
+		if s.amt.Cmp(r.amt) < 0 {
+			amt.Set(s.amt)
+		} else {
+			amt.Set(r.amt)
+		}
+
+		if amt.Sign() > 0 {
+			transfers = append(transfers, Transfer{
+				From: s.addr,
+				To:   r.addr,
+				Assets: []AssetAmount{
+					{
+						Unit:     asset,
+						Quantity: new(big.Int).Set(amt),
+					},
+				},
+			})
+		}
+
+		// subtract
+		s.amt.Sub(s.amt, amt)
+		r.amt.Sub(r.amt, amt)
+
+		if s.amt.Sign() == 0 {
+			i++
+		}
+		if r.amt.Sign() == 0 {
+			j++
+		}
+	}
+
+	return transfers
 }

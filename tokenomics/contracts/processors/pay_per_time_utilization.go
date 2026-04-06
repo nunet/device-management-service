@@ -220,6 +220,8 @@ func (p *PayPerTimeUtilizationProcessor) buildAllocationWindows(
 			continue
 		}
 
+		log.Infof("event StartAllocation: %+v", data)
+
 		windows[data.AllocationID] = &allocationWindow{
 			allocationID: data.AllocationID,
 			deploymentID: data.DeploymentID,

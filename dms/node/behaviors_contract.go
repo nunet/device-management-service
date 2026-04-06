@@ -533,6 +533,124 @@ func (n *Node) handleContractApprovalLocal(msg actor.Envelope) {
 	})
 }
 
+// listIncomingContractsFromSolutionEnablers aggregates incoming contracts from every unique
+// solution enabler DID in allContracts. Local root merges filteredLocal; other hosts get
+// ContractListBehavior. filteredLocal should be filterContractsByRole(allContracts, req.Role, callerDID).
+func (n *Node) listIncomingContractsFromSolutionEnablers(
+	allContracts []*contracts.Contract,
+	req contracts.ContractListIncomingRequest,
+	callerDID string,
+	filteredLocal []*contracts.Contract,
+) ([]*contracts.Contract, error) {
+	rootDID := n.rootCap.DID().String()
+	solutionHosts := uniqueSolutionEnablerDIDs(allContracts)
+	if len(solutionHosts) == 0 {
+		log.Warnf("no solution hosts found (i.e: no contracts created yet) for caller %s", callerDID)
+		return nil, fmt.Errorf("no solution hosts found to retrieve contracts from for caller %s", callerDID)
+	}
+
+	aggregated := make(map[string]*contracts.Contract, len(filteredLocal))
+
+	for _, hostDID := range solutionHosts {
+		if hostDID == "" {
+			continue
+		}
+
+		// if the solution enabler is this node, use local data
+		if hostDID == rootDID {
+			for _, c := range filteredLocal {
+				aggregated[c.ContractDID] = c
+			}
+			continue
+		}
+
+		handle, err := actor.HandleFromDID(hostDID)
+		if err != nil {
+			log.Warnf("failed to build handle for host %s: %v", hostDID, err)
+			continue
+		}
+
+		reply, err := n.invokeBehaviour(handle, behaviors.ContractListBehavior, req, invokeMessageTimeout)
+		if err != nil || reply.Message == nil {
+			log.Warnf("failed to invoke list incoming on host %s: %v", hostDID, err)
+			continue
+		}
+
+		var remoteResp contracts.ContractListIncomingResponse
+		if err := json.Unmarshal(reply.Message, &remoteResp); err != nil {
+			log.Warnf("failed to decode contract host response %s: %v", hostDID, err)
+			continue
+		}
+		if remoteResp.Error != "" {
+			log.Warnf("host %s returned error listing incoming contracts: %s", hostDID, remoteResp.Error)
+			continue
+		}
+
+		for _, c := range remoteResp.Contracts {
+			aggregated[c.ContractDID] = c
+		}
+	}
+
+	contractsSlice := make([]*contracts.Contract, 0, len(aggregated))
+	for _, c := range aggregated {
+		contractsSlice = append(contractsSlice, c)
+	}
+
+	return contractsSlice, nil
+}
+
+// FindTailContract resolves the tail contract for a head contract: it loads contracts from the
+// local store (to discover solution enablers), aggregates lists from solution enablers via
+// listIncomingContractsFromSolutionEnablers, then applies tail selection using store.FindTailContractFromContracts.
+// If there are no solution enablers in the local view, it falls back to tail matching on the local DB only.
+func (n *Node) FindTailContract(
+	headContractConfig types.ContractConfig,
+	computeProviderDID string,
+) (*types.ContractConfig, error) {
+	log.Infof("find_tail_contract: start head_did=%s head_provider=%s compute_provider=%s",
+		headContractConfig.DID, headContractConfig.Provider, computeProviderDID)
+
+	allContracts, err := n.contractStore.GetAllContracts()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all contracts: %w", err)
+	}
+	log.Infof("find_tail_contract: loaded %d contract(s) from local store", len(allContracts))
+	for _, c := range allContracts {
+		log.Infof("find_tail_contract: contract %s: %+v", c.ContractDID, c)
+	}
+
+	req := contracts.ContractListIncomingRequest{
+		Role: contracts.ContractRoleProvider,
+	}
+	filteredLocal := filterContractsByRole(allContracts, req.Role, computeProviderDID)
+	log.Infof("find_tail_contract: provider-role filter for compute provider yields %d local contract(s); aggregating from solution enablers",
+		len(filteredLocal))
+
+	merged, err := n.listIncomingContractsFromSolutionEnablers(allContracts, req, computeProviderDID, filteredLocal)
+	if err != nil {
+		log.Infof("find_tail_contract: solution-enabler aggregation failed (%v); falling back to tail match on local DB only", err)
+		cfg, ferr := store.FindTailContractFromContracts(headContractConfig, computeProviderDID, allContracts)
+		if ferr != nil {
+			return nil, ferr
+		}
+		log.Infof("find_tail_contract: resolved tail from local DB fallback tail_did=%s tail_host=%s", cfg.DID, cfg.Host)
+		return cfg, nil
+	}
+
+	log.Infof("find_tail_contract: merged %d contract(s) from solution enablers (deduped)", len(merged))
+	for _, c := range merged {
+		log.Infof("find_tail_contract: merged contract %s: %+v", c.ContractDID, c)
+	}
+
+	cfg, err := store.FindTailContractFromContracts(headContractConfig, computeProviderDID, merged)
+	if err != nil {
+		return nil, err
+	}
+	log.Infof("find_tail_contract: success tail_did=%s tail_host=%s tail_provider=%s",
+		cfg.DID, cfg.Host, cfg.Provider)
+	return cfg, nil
+}
+
 // compute provider can list incoming contracts for approval
 func (n *Node) handleListIncomingContracts(msg actor.Envelope) {
 	defer msg.Discard()
@@ -561,57 +679,10 @@ func (n *Node) handleListIncomingContracts(msg actor.Envelope) {
 	filteredLocal := filterContractsByRole(allContracts, req.Role, callerDID)
 
 	if callerDID == rootDID {
-		solutionHosts := uniqueSolutionEnablerDIDs(allContracts)
-		if len(solutionHosts) == 0 {
-			log.Warnf("no solution hosts found (i.e: no contracts created yet) for caller %s", callerDID)
-			handleErr(fmt.Errorf("no solution hosts found to retrieve contracts from for caller %s", callerDID))
+		contractsSlice, err := n.listIncomingContractsFromSolutionEnablers(allContracts, req, callerDID, filteredLocal)
+		if err != nil {
+			handleErr(err)
 			return
-		}
-		aggregated := make(map[string]*contracts.Contract, len(filteredLocal))
-
-		for _, hostDID := range solutionHosts {
-			if hostDID == "" {
-				continue
-			}
-
-			// if the solution enabler is this node, use local data
-			if hostDID == rootDID {
-				for _, c := range filterContractsByRole(allContracts, req.Role, callerDID) {
-					aggregated[c.ContractDID] = c
-				}
-				continue
-			}
-
-			handle, err := actor.HandleFromDID(hostDID)
-			if err != nil {
-				log.Warnf("failed to build handle for host %s: %v", hostDID, err)
-				continue
-			}
-
-			reply, err := n.invokeBehaviour(handle, behaviors.ContractListBehavior, req, invokeMessageTimeout)
-			if err != nil || reply.Message == nil {
-				log.Warnf("failed to invoke list incoming on host %s: %v", hostDID, err)
-				continue
-			}
-
-			var remoteResp contracts.ContractListIncomingResponse
-			if err := json.Unmarshal(reply.Message, &remoteResp); err != nil {
-				log.Warnf("failed to decode contract host response %s: %v", hostDID, err)
-				continue
-			}
-			if remoteResp.Error != "" {
-				log.Warnf("host %s returned error listing incoming contracts: %s", hostDID, remoteResp.Error)
-				continue
-			}
-
-			for _, c := range remoteResp.Contracts {
-				aggregated[c.ContractDID] = c
-			}
-		}
-
-		contractsSlice := make([]*contracts.Contract, 0, len(aggregated))
-		for _, c := range aggregated {
-			contractsSlice = append(contractsSlice, c)
 		}
 
 		n.sendReply(msg, contracts.ContractListIncomingResponse{
@@ -798,6 +869,7 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 
 	// Check if there's a quote for this transaction
 	var expectedAmount string
+	var quoteToClaim *payment_quote.PaymentQuote
 	if req.QuoteID != "" {
 		// If quote_id is provided, get quote by ID
 		quote, err := n.paymentQuoteStore.GetQuote(req.QuoteID)
@@ -805,19 +877,16 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 			handleErr(fmt.Errorf("failed to get quote: %w", err))
 			return
 		}
-		if quote.Used {
-			expectedAmount = quote.ConvertedAmount
-		} else {
-			// Fallback to payment amount if quote not found or not used
-			expectedAmount = payment.Amount
-		}
+		expectedAmount = quote.ConvertedAmount
+		quoteToClaim = quote
 	} else {
-		// Try to find used quote by unique_id
+		// Try to find a quote by unique_id (GetQuoteByUniqueID returns only unused quotes)
 		quote, err := n.paymentQuoteStore.GetQuoteByUniqueID(req.UniqueID)
-		if quote != nil && quote.Used {
+		if quote != nil {
 			expectedAmount = quote.ConvertedAmount
-		} else if err != nil { // meaning no quote was used
-			// Fallback to payment amount (for backward compatibility)
+			quoteToClaim = quote
+		} else if err != nil {
+			// No quote for this transaction — fall back to nominal amount (non-conversion path)
 			expectedAmount = payment.Amount
 		}
 	}
@@ -910,38 +979,41 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 			n.dmsConfig.PaymentProvider.BlockFrostAPIURL,
 		)
 		asset := n.dmsConfig.PaymentProvider.CardanoAssetPolicyID + hex.EncodeToString([]byte(n.dmsConfig.PaymentProvider.CardanoAssetName))
-		txs, err := client.FindTxsToAddressForAsset(n.ctx, asset, cardanoAddr.ProviderAddr)
-		if err != nil {
-			handleErr(fmt.Errorf("failed to get cardano transactions: %w", err))
-			return
-		}
 
-		for _, tx := range txs {
-			if strings.EqualFold(tx.TxHash, req.TxHash) {
-				foundFrom := false
-				for _, v := range tx.FromAddrs {
-					if v == cardanoAddr.RequesterAddr {
-						foundFrom = true
-						break
-					}
-				}
+		ctxT, cancel := context.WithTimeout(n.ctx, 30*time.Second)
+		defer cancel()
 
-				if !foundFrom {
-					handleErr(fmt.Errorf("requester transaction address not found: %s", cardanoAddr.RequesterAddr))
-					return
-				}
+		transfers := client.ComputeTransfersForAsset(ctxT, req.TxHash, asset)
+		for _, trsfr := range transfers {
+			if trsfr.From != cardanoAddr.RequesterAddr {
+				handleErr(fmt.Errorf("requester transaction address not found: %s", cardanoAddr.RequesterAddr))
+			}
 
-				ok, err := compareDecimals(tx.Quantity, expectedAmount)
-				if err != nil {
-					errorMsg = err.Error() + " tx amount: " + tx.Quantity + " expected amount: " + expectedAmount
-				}
-				if ok {
-					verified = true
-				} else {
-					errorMsg = "not verified: tx amount: " + tx.Quantity + " expected amount: " + expectedAmount
-				}
+			if trsfr.To != cardanoAddr.ProviderAddr {
+				handleErr(fmt.Errorf("provider transaction address not found: %s", cardanoAddr.ProviderAddr))
+			}
 
-				break
+			amount := ""
+			for _, a := range trsfr.Assets {
+				if a.Unit == asset {
+					amount = a.Quantity.String()
+					break
+				}
+			}
+			ok, err := compareDecimals(amount, expectedAmount)
+			if err != nil {
+				errorMsg = fmt.Sprintf(
+					"error: %v - tx amount: %s expected amount: %s",
+					err.Error(), amount, expectedAmount,
+				)
+			}
+			if ok {
+				verified = true
+			} else {
+				errorMsg = fmt.Sprintf(
+					"not verified: tx amount: %s expected amount: %s",
+					amount, expectedAmount,
+				)
 			}
 		}
 
@@ -956,6 +1028,9 @@ func (n *Node) handleContractPaymentValidationRequestFromContractHost(msg actor.
 		err := n.paymentStore.Update(payment)
 		if err != nil {
 			resp.Error = err.Error()
+		}
+		if quoteToClaim != nil {
+			_ = n.paymentQuoteStore.MarkQuoteAsUsed(quoteToClaim.QuoteID)
 		}
 	} else {
 		if errorMsg != "" {
@@ -991,27 +1066,6 @@ func (n *Node) handleConfirmLocalTransaction(msg actor.Envelope) {
 		return
 	}
 	contractID = paymentProviderDID
-
-	// If quote_id is provided, validate and mark as used
-	if req.QuoteID != "" {
-		// Validate quote is still valid (not expired, not used)
-		quote, err := n.paymentQuoteStore.ValidateQuote(req.QuoteID)
-		if err != nil {
-			handleErr(fmt.Errorf("quote validation failed: %w", err))
-			return
-		}
-
-		if quote.UniqueID != req.UniqueID {
-			handleErr(fmt.Errorf("quote does not match transaction"))
-			return
-		}
-
-		// Mark quote as used
-		if err := n.paymentQuoteStore.MarkQuoteAsUsed(req.QuoteID); err != nil {
-			handleErr(fmt.Errorf("failed to mark quote as used: %w", err))
-			return
-		}
-	}
 
 	paymentValidationReq := contracts.ContractPaymentValidationRequest{
 		TxHash:     req.TxHash,
@@ -1499,14 +1553,14 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 	}
 
 	// Get transaction
-	tx, err := n.transactionStore.GetTransactionByUniqueID(req.UniqueID)
+	payM, err := n.paymentStore.GetByUniqueID(req.UniqueID)
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get transaction: %w", err))
 		return
 	}
 
 	// Check if conversion is needed
-	if !tx.RequiresConversion || tx.PricingCurrency == "" {
+	if !payM.RequiresConversion || payM.PricingCurrency == "" {
 		handleErr(fmt.Errorf("transaction does not require conversion"))
 		return
 	}
@@ -1524,8 +1578,8 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 
 	// Get payment currency from transaction addresses
 	paymentCurrency := "NTX"
-	if len(tx.ToAddress) > 0 {
-		paymentCurrency = tx.ToAddress[0].Currency
+	if len(payM.ToAddress) > 0 {
+		paymentCurrency = payM.ToAddress[0].Currency
 	}
 
 	// Perform real-time conversion
@@ -1541,14 +1595,14 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 		return
 	}
 
-	convertedAmount, err := oracle.ConvertAmount(ctx, tx.OriginalAmount, tx.PricingCurrency, paymentCurrency)
+	convertedAmount, err := oracle.ConvertAmount(ctx, payM.OriginalAmount, payM.PricingCurrency, paymentCurrency)
 	if err != nil {
 		handleErr(fmt.Errorf("failed to convert amount: %w", err))
 		return
 	}
 
 	// Get exchange rate
-	rate, err := oracle.GetPrice(ctx, tx.PricingCurrency, paymentCurrency)
+	rate, err := oracle.GetPrice(ctx, payM.PricingCurrency, paymentCurrency)
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get exchange rate: %w", err))
 		return
@@ -1558,7 +1612,7 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 	quoteID := fmt.Sprintf("quote_%s_%d", req.UniqueID, time.Now().UnixNano())
 
 	// Get quote TTL from config (default: 2 minutes)
-	quoteTTL := 2 * time.Minute
+	quoteTTL := 10 * time.Minute
 	if n.dmsConfig.CoinMarketCap.QuoteTTL != "" {
 		if parsedTTL, err := time.ParseDuration(n.dmsConfig.CoinMarketCap.QuoteTTL); err == nil {
 			quoteTTL = parsedTTL
@@ -1569,9 +1623,9 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 	quote := payment_quote.PaymentQuote{
 		QuoteID:         quoteID,
 		UniqueID:        req.UniqueID,
-		OriginalAmount:  tx.OriginalAmount,
+		OriginalAmount:  payM.OriginalAmount,
 		ConvertedAmount: convertedAmount,
-		PricingCurrency: tx.PricingCurrency,
+		PricingCurrency: payM.PricingCurrency,
 		PaymentCurrency: paymentCurrency,
 		ExchangeRate:    fmt.Sprintf("%.8f", rate),
 		CreatedAt:       time.Now(),
@@ -1588,9 +1642,9 @@ func (n *Node) handleGetPaymentQuote(msg actor.Envelope) {
 	// Return response
 	resp := contracts.ContractGetPaymentQuoteResponse{
 		QuoteID:         quoteID,
-		OriginalAmount:  tx.OriginalAmount,
+		OriginalAmount:  payM.OriginalAmount,
 		ConvertedAmount: convertedAmount,
-		PricingCurrency: tx.PricingCurrency,
+		PricingCurrency: payM.PricingCurrency,
 		PaymentCurrency: paymentCurrency,
 		ExchangeRate:    fmt.Sprintf("%.8f", rate),
 		ExpiresAt:       quote.ExpiresAt,

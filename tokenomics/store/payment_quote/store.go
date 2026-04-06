@@ -21,7 +21,6 @@ import (
 
 const (
 	paymentQuotesCollection = "payment_quotes"
-	defaultQuoteTTL         = 2 * time.Minute // Quotes expire after 2 minutes
 )
 
 type PaymentQuote struct {

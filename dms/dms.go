@@ -69,6 +69,37 @@ type DMS struct {
 	RestServer *api.Server
 }
 
+type dmsStores struct {
+	contractStore            *store.Store
+	paymentsStore            *payment.Store
+	usageStore               *usage.Store
+	txStore                  *transaction.Store
+	paymentQuoteStore        *payment_quote.Store
+	provisionedResourceStore *gatewastore.Store
+}
+
+type nodeParams struct {
+	cfg              *config.Config
+	fs               afero.Fs
+	onboardingMan    *onboarding.Onboarding
+	resourceMan      *resources.DefaultManager
+	p2pNet           *libp2p.Libp2p
+	trustCtx         did.TrustContext
+	capCtx           ucan.CapabilityContext
+	geoIP2DB         *geoip2.Reader
+	volumeController *controller.GlusterController
+	stores           *dmsStores
+	deploymentStore  orchestrator.DeploymentStore
+	providerRegistry *provider.Registry
+}
+
+type serverParams struct {
+	config        *config.Config
+	onboardingMan *onboarding.Onboarding
+	resourceMan   *resources.DefaultManager
+	p2pNet        *libp2p.Libp2p
+}
+
 func initialize(fs afero.Fs, cfg *config.Config, env env.EnvironmentProvider) {
 	workDir := cfg.WorkDir
 	if workDir != "" {
@@ -118,32 +149,23 @@ func initialize(fs afero.Fs, cfg *config.Config, env env.EnvironmentProvider) {
 }
 
 func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPassphrase, contextName string) (*DMS, error) {
-	log.Debugf("starting dms with config: %+v", gcfg)
+	maskedForLog := gcfg
+	if maskedForLog.APM.APIKey != "" || maskedForLog.Observability.Elastic.APIKey != "" {
+		maskedForLog.APM.APIKey = "****"
+		maskedForLog.Observability.Elastic.APIKey = "****"
+	}
+	log.Debugf("starting dms with config: %+v", maskedForLog)
+
 	if contextName == "" {
 		contextName = node.DefaultContextName
 	}
 
-	// if bootstrap peers were passed by env var then override them
-	btPeers := env.Getenv("BOOTSTRAP_PEERS")
-	if btPeers != "" {
-		peers := strings.Split(btPeers, ",")
-		gcfg.P2P.BootstrapPeers = peers
-	}
-
+	gcfg = prepareConfig(gcfg, env)
 	initialize(fs, gcfg, env)
 
-	var volumeController *controller.GlusterController
-
-	if gcfg.StorageMode {
-		var err error
-		volumeController, err = controller.NewGlusterController(gcfg.StorageGlusterfsHostname, gcfg.StorageBricksDir, gcfg.StorageCADirectory)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create glusterfs controller: %w", err)
-		}
-
-		if !volumeController.IsServerWorking() {
-			return nil, errors.New("failed to start in storage mode")
-		}
+	volumeController, err := initStorage(gcfg)
+	if err != nil {
+		return nil, err
 	}
 
 	geoip2db, err := geoip2.FromBytes(geoLite2Country)
@@ -152,16 +174,9 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	}
 	log.Debugf("loaded geoip2 database: %v", geoip2db)
 
-	keyStoreDir := filepath.Join(gcfg.UserDir, node.KeystoreDir)
-	keyStore, err := keystore.New(fs, keyStoreDir, false)
+	privK, err := initCrypto(fs, gcfg, ksPassphrase, contextName)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create keystore: %w", err)
-	}
-
-	privK, err := GetPrivKeyFromKS(keyStore, ksPassphrase, contextName)
-	if err != nil {
-		return nil,
-			fmt.Errorf("private key from keystore: %w", err)
+		return nil, err
 	}
 
 	pubKey := privK.GetPublic()
@@ -171,12 +186,113 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		return nil, fmt.Errorf("unable to connect to database: %w", err)
 	}
 
+	stores, err := initStores(db)
+	if err != nil {
+		return nil, err
+	}
+
+	resourceManager, onboardingManager, deploymentStore, err := initManagers(db)
+	if err != nil {
+		return nil, err
+	}
+
+	p2pNet, trustCtx, capCtx, err := initNetwork(fs, gcfg, privK, pubKey, contextName)
+	if err != nil {
+		return nil, err
+	}
+
+	factories := provider.NewProviderFactoryRegistry(capCtx.DID().URI)
+	// add local incus to the factory
+	local.RegisterFactory(factories)
+	provRegistry, err := buildProviderRegistry(gcfg, factories)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build provider registry: %w", err)
+	}
+
+	node, err := initNode(&nodeParams{
+		cfg:              gcfg,
+		fs:               fs,
+		onboardingMan:    onboardingManager,
+		resourceMan:      resourceManager,
+		p2pNet:           p2pNet,
+		trustCtx:         trustCtx,
+		capCtx:           capCtx,
+		geoIP2DB:         geoip2db,
+		volumeController: volumeController,
+		stores:           stores,
+		deploymentStore:  deploymentStore,
+		providerRegistry: provRegistry,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	restServer := initHTTPServer(&serverParams{
+		config:        gcfg,
+		onboardingMan: onboardingManager,
+		resourceMan:   resourceManager,
+		p2pNet:        p2pNet,
+	})
+
+	return &DMS{
+		P2P:        p2pNet,
+		Node:       node,
+		RestServer: restServer,
+	}, nil
+}
+
+func prepareConfig(gcfg *config.Config, env env.EnvironmentProvider) *config.Config {
+	// Clone the config to avoid modifying the original
+	cfg := *gcfg
+
+	// if bootstrap peers were passed by env var then override them
+	btPeers := env.Getenv("BOOTSTRAP_PEERS")
+	if btPeers != "" {
+		peers := strings.Split(btPeers, ",")
+		cfg.P2P.BootstrapPeers = peers
+	}
+
+	return &cfg
+}
+
+func initStorage(gcfg *config.Config) (*controller.GlusterController, error) {
+	if !gcfg.StorageMode {
+		return nil, nil
+	}
+
+	volumeController, err := controller.NewGlusterController(gcfg.StorageGlusterfsHostname, gcfg.StorageBricksDir, gcfg.StorageCADirectory)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create glusterfs controller: %w", err)
+	}
+
+	if !volumeController.IsServerWorking() {
+		return nil, errors.New("failed to start in storage mode")
+	}
+
+	return volumeController, nil
+}
+
+func initCrypto(fs afero.Fs, gcfg *config.Config, ksPassphrase, contextName string) (crypto.PrivKey, error) {
+	keyStoreDir := filepath.Join(gcfg.UserDir, node.KeystoreDir)
+	keyStore, err := keystore.New(fs, keyStoreDir, false)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create keystore: %w", err)
+	}
+
+	privK, err := GetPrivKeyFromKS(keyStore, ksPassphrase, contextName)
+	if err != nil {
+		return nil, fmt.Errorf("private key from keystore: %w", err)
+	}
+
+	return privK, nil
+}
+
+func initStores(db *clover.DB) (*dmsStores, error) {
 	contractStore, err := store.New(db)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create contract store: %w", err)
 	}
 
-	// payment validator
 	paymentsStore, err := payment.New(db)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create payment store: %w", err)
@@ -187,6 +303,34 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		return nil, fmt.Errorf("unable to create usage store: %w", err)
 	}
 
+	txStore, err := transaction.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create transaction store: %w", err)
+	}
+
+	paymentQuoteStore, err := payment_quote.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create payment quote store: %w", err)
+	}
+
+	provisionedResourceStore, err := gatewastore.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare gateway store: %w", err)
+	}
+
+	stores := &dmsStores{
+		contractStore:            contractStore,
+		paymentsStore:            paymentsStore,
+		usageStore:               usageStore,
+		txStore:                  txStore,
+		paymentQuoteStore:        paymentQuoteStore,
+		provisionedResourceStore: provisionedResourceStore,
+	}
+
+	return stores, nil
+}
+
+func initManagers(db *clover.DB) (*resources.DefaultManager, *onboarding.Onboarding, orchestrator.DeploymentStore, error) {
 	hardwareManager := hardware.NewHardwareManager()
 	repos := resources.ManagerRepos{
 		OnboardedResources: clover_db.NewGenericEntityRepository[types.OnboardedResources](db),
@@ -194,22 +338,25 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 	}
 	resourceManager, err := resources.NewResourceManager(repos, hardwareManager)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create resource manager: %w", err)
+		return nil, nil, nil, fmt.Errorf("unable to create resource manager: %w", err)
 	}
 
 	onboardRepo := clover_db.NewGenericEntityRepository[types.OnboardingConfig](db)
 
-	// Create deployment store for orchestrator registry
 	deploymentStore, err := orchestrator.NewCloverDeploymentStore(db)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create deployment store: %w", err)
+		return nil, nil, nil, fmt.Errorf("unable to create deployment store: %w", err)
 	}
 
 	onboardingManager, err := onboarding.New(context.Background(), resourceManager, hardwareManager, onboardRepo)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create onboarding manager: %w", err)
+		return nil, nil, nil, fmt.Errorf("unable to create onboarding manager: %w", err)
 	}
 
+	return resourceManager, onboardingManager, deploymentStore, nil
+}
+
+func initNetwork(fs afero.Fs, gcfg *config.Config, privK crypto.PrivKey, pubKey crypto.PubKey, contextName string) (*libp2p.Libp2p, did.TrustContext, ucan.CapabilityContext, error) {
 	bootstrapPeers := make([]ma.Multiaddr, len(gcfg.BootstrapPeers))
 	for i, addr := range gcfg.BootstrapPeers {
 		bootstrapPeers[i], _ = ma.NewMultiaddr(addr)
@@ -233,16 +380,16 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 
 	p2pNet, err := libp2p.New(cfg, fs)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create libp2p instance: %v", err)
+		return nil, nil, nil, fmt.Errorf("unable to create libp2p instance: %v", err)
 	}
 
 	if err = p2pNet.Init(gcfg); err != nil {
-		return nil, fmt.Errorf("unable to initialize libp2p: %v", err)
+		return nil, nil, nil, fmt.Errorf("unable to initialize libp2p: %v", err)
 	}
 
 	trustCtx, err := did.NewTrustContextWithPrivateKey(privK)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create trust context: %w", err)
+		return nil, nil, nil, fmt.Errorf("unable to create trust context: %w", err)
 	}
 
 	capStoreDir := filepath.Join(gcfg.UserDir, node.CapstoreDir)
@@ -266,96 +413,77 @@ func NewDMS(fs afero.Fs, gcfg *config.Config, env env.EnvironmentProvider, ksPas
 		}
 	}
 
-	capCtx, err := LoadOrCreateCapCtx(
-		fs, capStoreFile, trustCtx, contextName, pubKey)
+	capCtx, err := LoadOrCreateCapCtx(fs, capStoreFile, trustCtx, contextName, pubKey)
 	if err != nil {
-		return nil,
-			fmt.Errorf(
-				"unable to load or create capability context: %w", err)
+		return nil, nil, nil, fmt.Errorf("unable to load or create capability context: %w", err)
 	}
 
 	trustCtx.Start(time.Hour)
 	capCtx.Start(5 * time.Minute)
+
+	return p2pNet, trustCtx, capCtx, nil
+}
+
+func initNode(params *nodeParams) (*node.Node, error) {
 	hostLocation := geolocation.Geolocation{
-		Continent: gcfg.HostContinent,
-		Country:   gcfg.HostCountry,
-		City:      gcfg.HostCity,
+		Continent: params.cfg.HostContinent,
+		Country:   params.cfg.HostCountry,
+		City:      params.cfg.HostCity,
 	}
 
 	portConfig := node.PortConfig{
-		AvailableRangeFrom: gcfg.PortAvailableRangeFrom,
-		AvailableRangeTo:   gcfg.PortAvailableRangeTo,
+		AvailableRangeFrom: params.cfg.PortAvailableRangeFrom,
+		AvailableRangeTo:   params.cfg.PortAvailableRangeTo,
 	}
 
 	volumeTracker := storage.NewVolumeTracker()
 
-	txStore, err := transaction.New(db)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create transaction store: %w", err)
-	}
-
-	paymentQuoteStore, err := payment_quote.New(db)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create payment quote store: %w", err)
-	}
-
-	factories := provider.NewProviderFactoryRegistry(capCtx.DID().URI)
-	// add local incus to the factory
-	local.RegisterFactory(factories)
-	provRegistry, err := buildProviderRegistry(gcfg, factories)
-	if err != nil {
-		log.Fatalf("failed to build provider registry: %v", err)
-	}
-
-	if gcfg.General.ComputeGateway {
+	if params.cfg.General.ComputeGateway {
 		if os.Getenv("DMS_BINARY_PATH") == "" {
-			log.Fatal("DMS_BINARY_PATH env var not set: compute gateway needs absolute path to dms binary")
+			return nil, fmt.Errorf("DMS_BINARY_PATH env var not set: compute gateway needs absolute path to dms binary")
 		}
 	}
-	provisionedResourceStore, err := gatewastore.New(db)
-	if err != nil {
-		log.Fatalf("failed to prepate gateway store: %v", err)
-	}
 
-	hostID := p2pNet.Host.ID().String()
-	node, err := node.New(*gcfg, afero.Afero{Fs: fs}, onboardingManager,
-		capCtx, hostID, p2pNet, resourceManager, cfg.Scheduler, hardwareManager,
-		geoip2db, hostLocation, portConfig, volumeTracker,
-		volumeController,
-		contractStore,
-		paymentsStore,
-		usageStore,
-		txStore,
-		deploymentStore,
-		provRegistry,
-		provisionedResourceStore,
-		paymentQuoteStore,
+	hostID := params.p2pNet.Host.ID().String()
+	hardwareManager := hardware.NewHardwareManager()
+	node, err := node.New(*params.cfg, afero.Afero{Fs: params.fs}, params.onboardingMan,
+		params.capCtx, hostID, params.p2pNet, params.resourceMan, backgroundtasks.NewScheduler(10, 1*time.Second), hardwareManager,
+		params.geoIP2DB, hostLocation, portConfig, volumeTracker,
+		params.volumeController,
+		params.stores.contractStore,
+		params.stores.paymentsStore,
+		params.stores.usageStore,
+		params.stores.txStore,
+		params.deploymentStore,
+		params.providerRegistry,
+		params.stores.provisionedResourceStore,
+		params.stores.paymentQuoteStore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
 	}
 
+	return node, nil
+}
+
+func initHTTPServer(params *serverParams) *api.Server {
 	// initialize rest api server
 	restConfig := api.ServerConfig{
-		P2P:         p2pNet,
-		Onboarding:  onboardingManager,
-		Resource:    resourceManager,
+		P2P:         params.p2pNet,
+		Onboarding:  params.onboardingMan,
+		Resource:    params.resourceMan,
 		Middlewares: nil,
-		Port:        gcfg.Rest.Port,
-		Addr:        gcfg.Rest.Addr,
+		Port:        params.config.Rest.Port,
+		Addr:        params.config.Rest.Addr,
 	}
 
 	// Add APM middleware by appending to restConfig.MidW
 	restConfig.Middlewares = append(restConfig.Middlewares, apmgin.Middleware(gin.Default()))
 
-	rServer := api.NewServer(&restConfig, gcfg)
+	rServer := api.NewServer(&restConfig, params.config)
 	rServer.SetupRoutes()
 
-	return &DMS{
-		P2P:        p2pNet,
-		Node:       node,
-		RestServer: rServer,
-	}, nil
+	return rServer
 }
 
 func buildProviderRegistry(gcfg *config.Config, factories *provider.FactoryRegistry) (*provider.Registry, error) {

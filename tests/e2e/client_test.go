@@ -933,13 +933,13 @@ func (c *Client) debugFlightrec(t *testing.T, context, passphrase string) (strin
 	return buf.String(), err
 }
 
-func (c *Client) getPaymentQuote(t *testing.T, context, passphrase, uniqueID string) (string, error) {
+func (c *Client) getPaymentQuote(t *testing.T, context, passphrase, validatorDID, uniqueID string) (string, error) {
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/payment/quote/get", "--unique-id", uniqueID, "--timeout", "5s"}
+	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/payment/quote/get", "--unique-id", uniqueID, "--timeout", "5s", "--dest", validatorDID}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -949,13 +949,17 @@ func (c *Client) getPaymentQuote(t *testing.T, context, passphrase, uniqueID str
 	return buf.String(), err
 }
 
-func (c *Client) validatePaymentQuote(t *testing.T, context, passphrase, quoteID string) (string, error) {
+func (c *Client) validatePaymentQuote(t *testing.T, context, passphrase, validatorDID, quoteID string) (string, error) {
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/payment/quote/validate", "--quote-id", quoteID, "--timeout", "5s"}
+	args := []string{
+		"actor", "cmd", "--context", context,
+		"/dms/tokenomics/contract/payment/quote/validate",
+		"--quote-id", quoteID, "--timeout", "5s", "--dest", validatorDID,
+	}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer
@@ -965,13 +969,17 @@ func (c *Client) validatePaymentQuote(t *testing.T, context, passphrase, quoteID
 	return buf.String(), err
 }
 
-func (c *Client) cancelPaymentQuote(t *testing.T, context, passphrase, quoteID string) (string, error) {
+func (c *Client) cancelPaymentQuote(t *testing.T, context, passphrase, validatorDID, quoteID string) (string, error) {
 	root := c.newCommandCtx()
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
 
-	args := []string{"actor", "cmd", "--context", context, "/dms/tokenomics/contract/payment/quote/cancel", "--quote-id", quoteID, "--timeout", "5s"}
+	args := []string{
+		"actor", "cmd", "--context", context,
+		"/dms/tokenomics/contract/payment/quote/cancel",
+		"--quote-id", quoteID, "--timeout", "5s", "--dest", validatorDID,
+	}
 	root.SetArgs(args)
 
 	var buf bytes.Buffer

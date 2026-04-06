@@ -318,6 +318,8 @@ func (p *PayPerResourceUtilizationProcessor) buildAllocationWindowsWithResources
 			continue
 		}
 
+		log.Infof("event StartAllocation: %+v", data)
+
 		// Get resources from StartAllocationEvent (primary source)
 		resources := data.Resources
 

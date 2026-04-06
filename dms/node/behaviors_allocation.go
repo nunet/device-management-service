@@ -216,7 +216,7 @@ func (n *Node) createAllocation(
 	var contractsToNotify map[string]types.ContractConfig
 	if headContractConfig.DID != "" {
 		// Contract chain: find and use Tail Contracts using Head Contract config
-		tailContract, err := n.contractStore.FindTailContract(
+		tailContract, err := n.FindTailContract(
 			headContractConfig,
 			computeProviderDID,
 		)

@@ -69,6 +69,8 @@ func (p *PayPerAllocationProcessor) CollectUsage(
 			if evtData.AllocationID != "" {
 				allocationSet[evtData.AllocationID] = true
 			}
+
+			log.Infof("event StartAllocation: %+v", evtData)
 		}
 		usageCount = len(allocationSet)
 	} else {
