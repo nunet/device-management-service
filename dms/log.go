@@ -10,10 +10,16 @@ package dms
 
 import (
 	logging "github.com/ipfs/go-log/v2"
+	"github.com/libp2p/go-libp2p/gologshim"
 	"go.uber.org/multierr"
 )
 
 var log = logging.Logger("dms")
+
+func init() {
+	// bridge libp2p's slog logger to go-log so runtime level controls work
+	gologshim.SetDefaultHandler(logging.SlogHandler())
+}
 
 // silenceLibp2pLogging is used to silence logs coming from libp2p
 // imported libraries as they're enabled by default.
@@ -74,6 +80,14 @@ func silenceConnLogs() error {
 	err = logging.SetLogLevelRegex("net/*", "panic")
 	errs = multierr.Append(errs, err)
 
+	err = logging.SetLogLevel("net/identify", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("observedaddrs", "panic")
+	errs = multierr.Append(errs, err)
+
+	err = logging.SetLogLevel("pubsub/rpc", "panic")
+	errs = multierr.Append(errs, err)
 	// dms-specific connections logs
 	err = logging.SetLogLevel("node.conn", "panic")
 	errs = multierr.Append(errs, err)
