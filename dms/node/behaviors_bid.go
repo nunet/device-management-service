@@ -257,6 +257,14 @@ func (n *Node) verifyContractChain(contractConfig types.ContractConfig, orchestr
 func (n *Node) handleBidRequest(msg actor.Envelope) {
 	defer msg.Discard()
 
+	if !n.readyForBids.Load() {
+		log.Debugw(
+			"not_ready_for_bids",
+			"labels", string(observability.LabelDeployment),
+		)
+		return
+	}
+
 	// ignore bid request from self if broadcast
 	// only accept self bid if own peer specified on ensemble
 	if msg.IsBroadcast() &&

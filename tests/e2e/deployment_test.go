@@ -820,9 +820,9 @@ func DeploymentUpdates(suite *TestSuite) {
 	})
 }
 
-// DeploymentRestorationPostReboot tests deployment persistence across node restarts
-func DeploymentRestorationPostReboot(suite *TestSuite) {
-	suite.Run("DeploymentRestorationPostReboot", func() {
+// DeploymentRestorationOrchestratorPostReboot tests deployment persistence across orchestrator restarts.
+func DeploymentRestorationOrchestratorPostReboot(suite *TestSuite) {
+	suite.Run("DeploymentRestorationOrchestratorPostReboot", func() {
 		// We need at least 2 nodes: 1 deployer and 1 provider
 		suite.Require().Len(suite.nodes, 2)
 		deployerIDX := 1
@@ -916,6 +916,122 @@ func DeploymentRestorationPostReboot(suite *TestSuite) {
 			suite.T().Log("deployment status after shutdown:", extractStatus(status))
 			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
 		}, 60*time.Second, 5*time.Second, "deployment did not reach Completed status")
+	})
+}
+
+// DeploymentRestorationProviderPostReboot tests provider-side allocation restoration after provider restart.
+func DeploymentRestorationProviderPostReboot(suite *TestSuite) {
+	suite.Run("DeploymentRestorationProviderPostReboot", func() {
+		suite.Require().Len(suite.nodes, 2)
+		providerIDX := 0
+		deployerIDX := 1
+		provider := suite.nodes[providerIDX]
+		deployer := suite.nodes[deployerIDX]
+
+		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "single-nginx.yaml")
+		deploymentResult := deployer.client.deploy(
+			suite.T(), deployer.userContext, deployer.password, ensemblePath,
+			"2m",
+		)
+		suite.Contains(deploymentResult, `"Status": "OK"`)
+		ensembleID := extractEnsembleID(deploymentResult)
+
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				suite.T().Logf("Error getting deployment status: %v", err)
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 60*time.Second, 5*time.Second, "Deployment did not reach Running status")
+
+		preRestartAllocs, err := provider.client.allocationsList(provider.userContext, provider.password)
+		suite.Require().NoError(err)
+
+		preRestartEnsembleAllocs := make(map[string]struct{})
+		for _, alloc := range preRestartAllocs {
+			if types.EnsembleIDFromAllocationID(alloc.ID) == ensembleID && alloc.ExecutionID != "" {
+				preRestartEnsembleAllocs[alloc.ID] = struct{}{}
+			}
+		}
+		suite.Require().NotEmpty(preRestartEnsembleAllocs, "expected at least one running allocation on provider before restart")
+
+		suite.killNode(providerIDX)
+
+		time.Sleep(2 * time.Second)
+
+		// ensure cp can connect to orch after restart since test nodes don't use the global bootstrap nodes
+		bootstrapPeers := make([]string, 0, len(suite.nodes)-1)
+		for i := 0; i < len(suite.nodes); i++ {
+			if i == providerIDX {
+				continue
+			}
+			otherNode := suite.nodes[i]
+			otherStats, err := otherNode.client.self(suite.T(), otherNode.dmsContext, otherNode.password)
+			suite.Require().NoError(err)
+			for _, addr := range strings.Split(otherStats.ListenAddr, ", ") {
+				bootstrapPeers = append(bootstrapPeers, fmt.Sprintf("%s/p2p/%s", addr, otherStats.ID))
+			}
+		}
+		provider.config.BootstrapPeers = bootstrapPeers
+
+		go suite.startNode(providerIDX)
+
+		// XXX: bad delay - use a restore status indicator
+		time.Sleep(30 * time.Second) // time to restore
+
+		suite.Require().Eventually(func() bool {
+			stats, err := provider.client.self(suite.T(), provider.dmsContext, provider.password)
+			if err != nil {
+				return false
+			}
+			return stats.ID != ""
+		}, 60*time.Second, 2*time.Second, "provider node should be ready after restart")
+
+		// reconnect restarted provider to the other nodes in the network
+		for i := 0; i < len(suite.nodes); i++ {
+			if i == providerIDX {
+				continue
+			}
+			otherNode := suite.nodes[i]
+			otherHostID, err := otherNode.client.self(suite.T(), otherNode.dmsContext, otherNode.password)
+			suite.Require().NoError(err)
+			result := provider.client.connect(suite.T(), provider.userContext, provider.password, otherHostID.ID)
+			suite.Contains(result, `"Status": "CONNECTED"`)
+		}
+
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusRunning.String()
+		}, 2*time.Minute, 5*time.Second, "deployment should remain Running after provider restart")
+
+		suite.Require().Eventually(func() bool {
+			postRestartAllocs, err := provider.client.allocationsList(provider.userContext, provider.password)
+			if err != nil {
+				return false
+			}
+			for _, alloc := range postRestartAllocs {
+				if types.EnsembleIDFromAllocationID(alloc.ID) == ensembleID && alloc.ExecutionID != "" {
+					if _, ok := preRestartEnsembleAllocs[alloc.ID]; ok {
+						return true
+					}
+				}
+			}
+			return false
+		}, 2*time.Minute, 5*time.Second, "provider allocation was not restored after provider restart")
+
+		shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+		suite.Contains(shutdownRes, `"Error": ""`)
+		suite.Require().Eventually(func() bool {
+			status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, ensembleID)
+			if err != nil {
+				return false
+			}
+			return extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+		}, 2*time.Minute, 5*time.Second, "deployment did not reach Completed status")
 	})
 }
 

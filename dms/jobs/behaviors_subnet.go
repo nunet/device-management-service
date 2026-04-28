@@ -16,6 +16,7 @@ import (
 
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 )
 
 func (a *Allocation) handleSubnetAddPeer(msg actor.Envelope) {
@@ -41,6 +42,8 @@ func (a *Allocation) handleSubnetAddPeer(msg actor.Envelope) {
 		"labels", []string{},
 		"peerID", request.PeerID,
 		"subnetID", request.SubnetID)
+	a.setSubnetID(request.SubnetID)
+	a.mergeRoutingTable(map[string]string{request.IP: request.PeerID})
 
 	resp.OK = true
 	a.sendReply(msg, resp)
@@ -68,6 +71,7 @@ func (a *Allocation) handleSubnetAcceptPeers(msg actor.Envelope) {
 	log.Debugw("subnet_peer_accepted",
 		"labels", []string{},
 		"peers", request.PartialRoutingTable)
+	a.mergeRoutingTable(request.PartialRoutingTable)
 
 	resp.OK = true
 	a.sendReply(msg, resp)
@@ -98,6 +102,15 @@ func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 		a.sendReply(msg, resp)
 		return
 	}
+
+	a.portMapping = append(a.portMapping, jobtypes.AllocationPortMapping{
+		SubnetID:   request.SubnetID,
+		Protocol:   request.Protocol,
+		SourceIP:   request.SourceIP,
+		SourcePort: request.SourcePort,
+		DestIP:     request.DestIP,
+		DestPort:   request.DestPort,
+	})
 
 	log.Debugw("subnet_port_mapped",
 		"labels", []string{},
@@ -130,6 +143,8 @@ func (a *Allocation) handleSubnetDNSAddRecords(msg actor.Envelope) {
 		"labels", []string{},
 		"records", request.Records,
 		"subnetID", request.SubnetID)
+
+	a.mergeDNSRecords(request.Records)
 
 	resp.OK = true
 	a.sendReply(msg, resp)
@@ -195,6 +210,7 @@ func (a *Allocation) handleSubnetDNSRemoveRecords(msg actor.Envelope) {
 		"labels", []string{},
 		"domains", request.DomainNames,
 		"subnetID", request.SubnetID)
+	a.removeDNSRecords(request.DomainNames)
 
 	resp.OK = true
 	a.sendReply(msg, resp)
@@ -222,6 +238,7 @@ func (a *Allocation) handleSubnetRemovePeers(msg actor.Envelope) {
 	log.Debugw("subnet_peer_removed",
 		"labels", []string{},
 		"peers", request.PartialRoutingTable)
+	a.removeRoutingTableEntries(request.PartialRoutingTable)
 
 	resp.OK = true
 	a.sendReply(msg, resp)

@@ -100,6 +100,7 @@ func TestHandleAllocatedResources(t *testing.T) {
 			map[string]types.ContractConfig{},
 			eventhandler.New(ctx, 1, 1, time.Second, time.Second, node.handleContractEvents),
 			"deployment-id",
+			func(_ string, _ jobtypes.AllocationStatus) {},
 		)
 		require.NoError(t, err)
 		require.NotNil(t, alloc)
@@ -233,6 +234,7 @@ func TestHandleFreeResources(t *testing.T) {
 			map[string]types.ContractConfig{},
 			eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
 			"deployment-id",
+			func(_ string, _ jobtypes.AllocationStatus) {},
 		)
 		require.NoError(t, err)
 		require.NotNil(t, alloc)

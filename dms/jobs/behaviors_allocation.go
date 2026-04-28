@@ -37,11 +37,6 @@ func (a *Allocation) handleAllocationStart(msg actor.Envelope) {
 
 	var resp behaviors.AllocationStartResponse
 
-	// Store state regardless of whether we're running or in standby
-	a.state.subnetIP = req.SubnetIP
-	a.state.gatewayIP = req.GatewayIP
-	a.state.portMapping = req.PortMapping
-
 	// TODO: context should cancel when the actor is stopped to stop monitor
 	if err := a.Run(context.TODO(), req.SubnetIP, req.GatewayIP, req.PortMapping); err != nil {
 		err = fmt.Errorf("failed to run allocation: %w", err)

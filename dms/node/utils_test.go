@@ -253,6 +253,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		"deployments",
 		"contracts",
 		"contracts_keys",
+		"allocations_state_persist",
 	})
 	require.NoError(t, err)
 
@@ -294,6 +295,8 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		Country:   dcfg.HostCountry,
 		City:      dcfg.HostCity,
 	}
+
+	allocsPersisted := cloverDB.NewGenericRepository[jobtypes.AllocationsStatePersist](db)
 
 	scheduler := backgroundtasks.NewScheduler(1, time.Second)
 
@@ -351,6 +354,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		executionType: jobtypes.ExecutorDocker,
 	}
 	node.contractStore = contractStore
+	node.allocsPersistRepo = allocsPersisted
 	allocator.setTailContractGetter(node)
 
 	dmsBehaviors := node.getDMSBehaviors()
@@ -434,6 +438,8 @@ func newMockNodeWithOrchestratorRegistry(t *testing.T, substrate *network.Substr
 	}
 
 	onboardR := cloverDB.NewGenericEntityRepository[types.OnboardingConfig](db)
+
+	allocsPersisted := cloverDB.NewGenericRepository[jobtypes.AllocationsStatePersist](db)
 
 	// Create deployment store for orchestrator registry
 	deploymentStore, err := orchestrator.NewCloverDeploymentStore(db)
@@ -522,6 +528,7 @@ func newMockNodeWithOrchestratorRegistry(t *testing.T, substrate *network.Substr
 		executor:      &docker.Executor{},
 		executionType: jobtypes.ExecutorDocker,
 	}
+	node.allocsPersistRepo = allocsPersisted
 	allocator.setTailContractGetter(node)
 
 	dmsBehaviors := node.getDMSBehaviors()

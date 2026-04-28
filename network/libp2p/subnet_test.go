@@ -45,7 +45,7 @@ func TestSubnetCreate(t *testing.T) {
 	// Wait a bit to ensure resources are available
 	time.Sleep(500 * time.Millisecond)
 
-	err := peer1.CreateSubnet(context.Background(), "subnet1", "10.20.30.0/24", map[string]string{})
+	err := peer1.CreateSubnet("subnet1", "10.20.30.0/24", map[string]string{})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, len(peer1.subnets))
@@ -62,7 +62,7 @@ func TestSubnetAddRemovePeer(t *testing.T) {
 	// Wait a bit to ensure resources are available
 	time.Sleep(500 * time.Millisecond)
 
-	err := peer1.CreateSubnet(context.Background(), "subnet1", "10.0.0.0/24", map[string]string{})
+	err := peer1.CreateSubnet("subnet1", "10.0.0.0/24", map[string]string{})
 	require.NoError(t, err)
 
 	// requires root privileges - skipping if not root
@@ -118,7 +118,7 @@ func TestSubnetMapUnmapPorts(t *testing.T) {
 	// Wait a bit to ensure resources are available
 	time.Sleep(500 * time.Millisecond)
 
-	err = peer1.CreateSubnet(context.Background(), "subnet1", "10.0.0.0/24", map[string]string{})
+	err = peer1.CreateSubnet("subnet1", "10.0.0.0/24", map[string]string{})
 	require.NoError(t, err)
 
 	err = peer1.MapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "8888")
@@ -190,7 +190,7 @@ func TestSubnetAddRemoveDNSRecord(t *testing.T) {
 	// Wait a bit to ensure resources are available
 	time.Sleep(500 * time.Millisecond)
 
-	err = peer1.CreateSubnet(context.Background(), "subnet1", "10.0.0.0/24", map[string]string{})
+	err = peer1.CreateSubnet("subnet1", "10.0.0.0/24", map[string]string{})
 	require.NoError(t, err)
 
 	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
@@ -243,7 +243,7 @@ func TestSubnetDestroy(t *testing.T) {
 	// Wait a bit to ensure resources are available
 	time.Sleep(500 * time.Millisecond)
 
-	err = peer1.CreateSubnet(context.Background(), "subnet1", "10.0.0.0/24", map[string]string{})
+	err = peer1.CreateSubnet("subnet1", "10.0.0.0/24", map[string]string{})
 	require.NoError(t, err)
 
 	err = peer1.AddSubnetPeer("subnet1", peer1.Host.ID().String(), "10.0.0.2")
@@ -365,8 +365,8 @@ func TestSubnetIOLoop(t *testing.T) {
 	// No need to set NetIfaceFactory after construction
 
 	t.Log("Creating subnets")
-	require.NoError(t, peer1.CreateSubnet(context.Background(), subnetID, "10.0.0.0/24", routingTable))
-	require.NoError(t, peer2.CreateSubnet(context.Background(), subnetID, "10.0.0.0/24", routingTable))
+	require.NoError(t, peer1.CreateSubnet(subnetID, "10.0.0.0/24", routingTable))
+	require.NoError(t, peer2.CreateSubnet(subnetID, "10.0.0.0/24", routingTable))
 
 	t.Log("Adding subnet peers")
 	// Only add the local peer as a subnet peer on each
@@ -1107,14 +1107,14 @@ func TestSubnetCreationDestructionRecreation(t *testing.T) {
 	createSubnetTestCommunication := func(t *testing.T) {
 		t.Helper()
 		// Create subnet on peer1
-		err := peer1.CreateSubnet(context.TODO(), "test_subnet", "10.20.20.0/24", map[string]string{
+		err := peer1.CreateSubnet("test_subnet", "10.20.20.0/24", map[string]string{
 			"10.20.20.2": peer1.Host.ID().String(),
 			"10.20.20.3": peer2.Host.ID().String(),
 		})
 		require.NoError(t, err)
 
 		// Create subnet on peer2
-		err = peer2.CreateSubnet(context.TODO(), "test_subnet", "10.20.20.0/24", map[string]string{
+		err = peer2.CreateSubnet("test_subnet", "10.20.20.0/24", map[string]string{
 			"10.20.20.2": peer1.Host.ID().String(),
 			"10.20.20.3": peer2.Host.ID().String(),
 		})
@@ -1218,14 +1218,14 @@ func TestSubnetCreationDestructionRecreation(t *testing.T) {
 		t.Log("recreating subnet and test communication")
 
 		// Recreate subnet on peer1
-		err := peer1.CreateSubnet(context.TODO(), "test_subnet_2", "10.30.30.0/24", map[string]string{
+		err := peer1.CreateSubnet("test_subnet_2", "10.30.30.0/24", map[string]string{
 			"10.30.30.2": peer1.Host.ID().String(),
 			"10.30.30.3": peer2.Host.ID().String(),
 		})
 		require.NoError(t, err)
 
 		// Recreate subnet on peer2
-		err = peer2.CreateSubnet(context.TODO(), "test_subnet_2", "10.30.30.0/24", map[string]string{
+		err = peer2.CreateSubnet("test_subnet_2", "10.30.30.0/24", map[string]string{
 			"10.30.30.2": peer1.Host.ID().String(),
 			"10.30.30.3": peer2.Host.ID().String(),
 		})
@@ -1339,7 +1339,7 @@ func TestSubnetDNSCreationAndResolution(t *testing.T) {
 		"db.local":   "10.0.0.102",
 	}
 
-	err := peer1.CreateSubnet(context.Background(), "test_subnet", "10.0.0.0/24", map[string]string{})
+	err := peer1.CreateSubnet("test_subnet", "10.0.0.0/24", map[string]string{})
 	require.NoError(t, err)
 
 	// Add DNS records to the subnet
@@ -1586,7 +1586,7 @@ func TestSubnetDNSResolutionWithDig(t *testing.T) {
 	})
 
 	t.Run("create subnet", func(t *testing.T) {
-		err := peer1.CreateSubnet(context.Background(), "test_subnet_dig", "10.0.0.0/24", map[string]string{})
+		err := peer1.CreateSubnet("test_subnet_dig", "10.0.0.0/24", map[string]string{})
 		require.NoError(t, err)
 	})
 

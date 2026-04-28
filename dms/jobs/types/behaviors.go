@@ -10,6 +10,7 @@ package jobtypes
 
 import (
 	"gitlab.com/nunet/device-management-service/actor"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -31,6 +32,8 @@ type AllocationDeploymentConfig struct {
 	Keys             []types.AllocationKey
 	Volume           []types.VolumeConfig
 	Contracts        map[string]types.ContractConfig
+	NetState         AllocationNetState
+	Identity         crypto.PrivKey
 }
 
 type AllocationDeploymentResponse struct {
@@ -57,4 +60,16 @@ type SignPromiseBidRequest struct {
 type PromiseBidSigningResponse struct {
 	Bid   Bid
 	Error string
+}
+
+type AllocationsPersist struct {
+	types.BaseDBModel
+	EnsembleID         string                                `json:"ensemble_id"`
+	Allocations        map[string]AllocationDeploymentConfig `json:"allocations"`
+	Orchestrator       actor.Handle                          `json:"orchestrator"`
+	Ports              map[int]int                           `json:"ports"`
+	DynamicPortsNum    int                                   `json:"dynamic_ports_num"`
+	SubnetID           string                                `json:"subnet_id"`
+	SubnetCIDR         string                                `json:"subnet_cidr"`
+	SubnetRoutingTable map[string]string                     `json:"subnet_routing_table"`
 }

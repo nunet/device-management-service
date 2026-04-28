@@ -413,7 +413,6 @@ func (c *Client) FindContainer(ctx context.Context, label string, value string) 
 	}
 
 	err = fmt.Errorf("container (%s=%s) not found", label, value)
-	log.Warnw("docker_container_not_found", "error", err)
 	return "", err
 }
 

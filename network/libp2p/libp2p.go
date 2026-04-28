@@ -489,18 +489,17 @@ func (l *Libp2p) sendMessage(ctx context.Context, pid peer.ID, msg types.Message
 		}
 	}()
 
-	if !l.PeerConnected(pid) {
-		var ai peer.AddrInfo
-		ai, err = l.resolvePeerAddress(ctx, pid)
-		if err != nil {
-			log.Warnf("send: error resolving addresses for peer %s: %s", pid, err)
-			return
-		}
+	// resolve address and connect anyway
+	var ai peer.AddrInfo
+	ai, err = l.resolvePeerAddress(ctx, pid)
+	if err != nil {
+		log.Warnf("send: error resolving addresses for peer %s: %s", pid, err)
+		return
+	}
 
-		if err = l.Host.Connect(ctx, ai); err != nil {
-			log.Warnf("send: failed to connect to peer %s: %s", pid, err)
-			return
-		}
+	if err = l.Host.Connect(ctx, ai); err != nil {
+		log.Warnf("send: failed to connect to peer %s: %s", pid, err)
+		return
 	}
 
 	requestBufferSize := 8 + len(msg.Data)
@@ -1396,6 +1395,7 @@ func (l *Libp2p) rawQUICConnect(target peer.ID, serverName string, onlyPublicAdd
 					return nil, nil, fmt.Errorf("failed to convert multiaddr to net.UDPAddr: %w", err)
 				}
 				udpAddr = addr
+				break
 			}
 		} else {
 			if isQUICAddr(a) {

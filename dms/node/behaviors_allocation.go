@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/spf13/afero"
@@ -27,6 +26,7 @@ import (
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	"gitlab.com/nunet/device-management-service/executor/docker"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
 	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
@@ -49,7 +49,7 @@ func (n *Node) handleSubnetCreate(msg actor.Envelope) {
 	}
 
 	resp := orchestrator.SubnetCreateResponse{}
-	err := n.network.CreateSubnet(context.Background(), request.SubnetID, request.CIDR, request.RoutingTable)
+	err := n.network.CreateSubnet(request.SubnetID, request.CIDR, request.RoutingTable)
 	if err != nil {
 		handleErr(err)
 		return
@@ -59,6 +59,30 @@ func (n *Node) handleSubnetCreate(msg actor.Envelope) {
 	subnetStatusMx.Lock()
 	subnetStatus[request.SubnetID] = 1
 	subnetStatusMx.Unlock()
+
+	// persist if CP
+	isOrch := false
+	orchs := n.orchestratorRegistry.Orchestrators()
+	for _, orch := range orchs {
+		if orch.Actor().Handle().Equal(msg.From) {
+			isOrch = true
+			break
+		}
+	}
+
+	if !isOrch {
+		ap := jobtypes.AllocationsStatePersist{
+			EnsembleID:   request.EnsembleID,
+			SubnetCIDR:   request.CIDR,
+			RoutingTable: request.RoutingTable,
+			Orchestrator: msg.From,
+		}
+		err = n.createAllocStatePersist(ap)
+		if err != nil {
+			handleErr(fmt.Errorf("error creating allocation state persist: %s", err))
+			return
+		}
+	}
 
 	resp.OK = true
 	n.sendReply(msg, resp)
@@ -105,6 +129,24 @@ func (n *Node) handleSubnetDestroy(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
+func (n *Node) subnetJoin(request orchestrator.SubnetJoinRequest) error {
+	err := n.network.AddSubnetPeer(request.SubnetID, request.PeerID, request.IP)
+	if err != nil {
+		return err
+	}
+
+	err = n.network.AcceptSubnetPeers(request.SubnetID, request.RoutingTable)
+	if err != nil {
+		return err
+	}
+
+	err = n.network.AddSubnetDNSRecords(request.SubnetID, request.Records)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (n *Node) handleSubnetJoin(msg actor.Envelope) {
 	defer msg.Discard()
 
@@ -121,19 +163,8 @@ func (n *Node) handleSubnetJoin(msg actor.Envelope) {
 
 	resp := orchestrator.SubnetJoinResponse{}
 	_ = n.network.RemoveSubnetPeers(request.SubnetID, map[string]string{request.IP: request.PeerID})
-	err := n.network.AddSubnetPeer(request.SubnetID, request.PeerID, request.IP)
-	if err != nil {
-		handleErr(err)
-		return
-	}
 
-	err = n.network.AcceptSubnetPeers(request.SubnetID, request.RoutingTable)
-	if err != nil {
-		handleErr(err)
-		return
-	}
-
-	err = n.network.AddSubnetDNSRecords(request.SubnetID, request.Records)
+	err := n.subnetJoin(request)
 	if err != nil {
 		handleErr(err)
 		return
@@ -176,6 +207,7 @@ func (n *Node) createAllocation(
 	job jobs.Job, supervisor actor.Handle,
 	contracts map[string]types.ContractConfig,
 	deploymentID string,
+	identity crypto.PrivKey,
 ) (*jobs.Allocation, error) {
 	if contracts == nil {
 		contracts = make(map[string]types.ContractConfig)
@@ -186,7 +218,14 @@ func (n *Node) createAllocation(
 		return nil, fmt.Errorf("create executor: %w", err)
 	}
 
-	allocActor, err := n.actor.CreateChild(allocationID, supervisor)
+	createChildOpts := []actor.CreateChildOption{}
+
+	// restoring an existing alloc identity
+	if identity != nil {
+		createChildOpts = append(createChildOpts, actor.WithPrivKey(identity))
+	}
+
+	allocActor, err := n.actor.CreateChild(allocationID, supervisor, createChildOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create allocation actor: %w", err)
 	}
@@ -198,6 +237,7 @@ func (n *Node) createAllocation(
 		contracts,
 		n.contractEventHandler,
 		deploymentID,
+		n.allocStatusUpdate,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("allocate: %w", err)
@@ -288,6 +328,7 @@ func (n *Node) createAllocations(
 			supervisor,
 			allocationConfig.Contracts,
 			ensembleID,
+			allocationConfig.Identity,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create allocation %s: %w", allocationID, err)
@@ -295,52 +336,42 @@ func (n *Node) createAllocations(
 
 		allocHandlesByID[allocationID] = allocation.Actor.Handle()
 
-		// node grants subnet create/destroy caps to the orchestrator
-		if err := n.actor.Security().Grant(supervisor.DID, n.actor.Handle().DID, []ucan.Capability{
-			ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
-		}, grantAllocationCapsFreq); err != nil {
-			return nil, fmt.Errorf("grant node caps: %w", err)
-		}
-
 		allocDID, err := did.FromID(allocation.Actor.Handle().ID)
 		if err != nil {
 			return nil, fmt.Errorf("deriving allocation did: %w", err)
 		}
-		if err := n.actor.Security().Grant(supervisor.DID, allocDID, []ucan.Capability{
-			behaviors.AllocationNamespace,
-		}, grantAllocationCapsFreq); err != nil {
-			return nil, fmt.Errorf("grant allocation caps: %w", err)
+
+		// grant orch on alloc namespapce
+		err = n.grantCaps(
+			supervisor.DID,
+			allocDID,
+			[]ucan.Capability{behaviors.AllocationNamespace},
+			func() bool {
+				return allocation.Status().Status != jobs.AllocationStopped
+			},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("granting allocation capabilities on allocation namespace: %w", err)
 		}
 
-		// refresh allocation caps grants periodically
-		go func() {
-			ticker := time.NewTicker(grantAllocationCapsFreq)
-			defer ticker.Stop()
+		// grant orch for node on ensemble namespace eg create/destroy subnet
+		err = n.grantCaps(
+			supervisor.DID,
+			n.actor.Handle().DID,
+			[]ucan.Capability{ucan.Capability(
+				fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID))},
+			func() bool {
+				return allocation.Status().Status != jobs.AllocationStopped
+			},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("granting orch capabilities on ensemble namespace: %w", err)
+		}
 
-			for allocation.Status().Status != jobs.AllocationStopped {
-				select {
-				case <-n.ctx.Done():
-					return
-				case <-ticker.C:
-					// node grants subnet create/destroy caps to the orchestrator
-					if err := n.actor.Security().Grant(supervisor.DID, n.actor.Handle().DID, []ucan.Capability{
-						ucan.Capability(fmt.Sprintf(behaviors.EnsembleNamespace, ensembleID)),
-					}, grantAllocationCapsFreq); err != nil {
-						log.Warnf("grant node caps: %v", err)
-					}
-
-					// allocation grants subnet manage caps to the orchestrator
-					if err := n.actor.Security().Grant(supervisor.DID, allocDID, []ucan.Capability{
-						behaviors.AllocationNamespace,
-					}, grantAllocationCapsFreq); err != nil {
-						log.Warnf("grant allocation caps: %v", err)
-					}
-				}
-			}
-		}()
 	}
 
 	log.Infof("Finished createAllocations for ensembleID: %s", ensembleID)
+
 	return allocHandlesByID, nil
 }
 

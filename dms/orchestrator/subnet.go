@@ -42,6 +42,7 @@ type subnetRequest struct {
 }
 
 type SubnetCreateRequest struct {
+	EnsembleID   string
 	SubnetID     string
 	IP           string
 	RoutingTable map[string]string
@@ -225,6 +226,7 @@ func (p *Provisioner) createSubnet(
 				h,
 				fmt.Sprintf(behaviors.SubnetCreateBehavior.DynamicTemplate, manifestID),
 				SubnetCreateRequest{
+					EnsembleID:   manifestID,
 					SubnetID:     manifestID,
 					RoutingTable: routingTable,
 					CIDR:         p.subnetManifest.CIDR,

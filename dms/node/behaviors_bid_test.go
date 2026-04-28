@@ -285,6 +285,7 @@ func TestHandleBidRequest(t *testing.T) {
 		t.Parallel()
 
 		node, sActor, _ := newMockNodeWithSender(t, behaviors.BidRequestBehavior)
+		node.readyForBids.Store(true)
 
 		// mark node as onboarded so it can normally bid
 		mockOnboarding(t, node, MockTotalCPU/2, MockTotalRAM/2, MockTotalDisk/2)
@@ -310,6 +311,7 @@ func TestHandleBidRequest(t *testing.T) {
 		t.Parallel()
 
 		node, _, _ := newMockNodeWithSender(t, behaviors.BidRequestBehavior)
+		node.readyForBids.Store(true)
 
 		// mark node as onboarded so it can normally bid
 		mockOnboarding(t, node, MockTotalCPU/2, MockTotalRAM/2, MockTotalDisk/2)

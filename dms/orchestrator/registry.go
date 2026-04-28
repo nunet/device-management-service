@@ -176,6 +176,7 @@ func (f *basicRegistry) restoreDeployment(
 		statusSubscribers:     make(map[chan jtypes.DeploymentStatus]struct{}),
 		allocationIDGenerator: allocationIDGenerator,
 	}
+	o.supervisor.SetAllocationStatusUpdater(o.updateAllocationStatusFromSupervisor)
 
 	err := o.RegisterBehaviors()
 	if err != nil {

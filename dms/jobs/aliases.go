@@ -48,6 +48,7 @@ const (
 
 	AllocationPending    = jobtypes.AllocationPending
 	AllocationRunning    = jobtypes.AllocationRunning
+	AllocationRestarting = jobtypes.AllocationRestarting
 	AllocationStopped    = jobtypes.AllocationStopped
 	AllocationFailed     = jobtypes.AllocationFailed
 	AllocationCompleted  = jobtypes.AllocationCompleted

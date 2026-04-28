@@ -99,7 +99,8 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 
 	// It's possible that this is being called due to a restart. We should check if the
 	// container is already running.
-	containerID, err := e.FindRunningContainer(ctx, request.JobID, request.ExecutionID)
+	// Checking with jobID to find containers from a previous DMS run as well
+	containerID, err := e.FindRunningContainer(ctx, request.JobID)
 	if err != nil {
 		// Unable to find a running container for this execution, we will instead check for a handler, and
 		// failing that will create a new container.
@@ -880,14 +881,9 @@ func makeContainerMounts(
 func (e *Executor) containerLabels(jobID string, executionID string) map[string]string {
 	return map[string]string{
 		labelExecutorName: e.ID,
-		labelJobID:        labelJobValue(e.ID, jobID),
+		labelJobID:        jobID,
 		labelExecutionID:  labelExecutionValue(e.ID, jobID, executionID),
 	}
-}
-
-// labelJobValue returns the value for the job label.
-func labelJobValue(executorID string, jobID string) string {
-	return fmt.Sprintf("%s_%s", executorID, jobID)
 }
 
 // labelExecutionValue returns the value for the execution label.
@@ -898,11 +894,30 @@ func labelExecutionValue(executorID string, jobID string, executionID string) st
 // FindRunningContainer finds the container that is running the execution
 // with the given ID. It returns the container ID if found, or an error if
 // the container is not found.
+// It queries with the job id label so will return containers across different DMS runs
 func (e *Executor) FindRunningContainer(
 	ctx context.Context,
 	jobID string,
-	executionID string,
 ) (string, error) {
-	labelValue := labelExecutionValue(e.ID, jobID, executionID)
-	return e.client.FindContainer(ctx, labelExecutionID, labelValue)
+	labelValue := jobID
+	return e.client.FindContainer(ctx, labelJobID, labelValue)
+}
+
+// TerminateByJobID force-stops and removes the container for the given job ID
+// used during allocation recovery rollback when we cannot safely restore
+func (e *Executor) TerminateByJobID(ctx context.Context, jobID string, timeoutSec int) error {
+	containerID, err := e.FindRunningContainer(ctx, jobID)
+	if err != nil {
+		return err
+	}
+
+	if err := e.client.StopContainer(ctx, containerID, container.StopOptions{Timeout: &timeoutSec}); err != nil {
+		return fmt.Errorf("stop container %s for job %s: %w", containerID, jobID, err)
+	}
+
+	if err := e.client.RemoveContainer(ctx, containerID); err != nil {
+		return fmt.Errorf("remove container %s for job %s: %w", containerID, jobID, err)
+	}
+
+	return nil
 }
