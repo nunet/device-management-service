@@ -30,7 +30,7 @@ import (
 func TestE2E(t *testing.T) {
 	t.Parallel()
 	var (
-		testSuites         = 20
+		testSuites         = 21
 		totalPortsRequired = 2 * testSuites
 	)
 
@@ -108,12 +108,23 @@ func TestE2E(t *testing.T) {
 	t.Run("DeploymentRestorationPostReboot", func(t *testing.T) {
 		deploymentRestoration := &TestSuite{
 			numNodes:      2,
-			Name:          "deployment_restoration_post_reboot",
+			Name:          "deployment_restoration_orchestrator_post_reboot",
 			restPortIndex: ports[12],
 			p2pPortIndex:  ports[13],
-			runner:        DeploymentRestorationPostReboot,
+			runner:        DeploymentRestorationOrchestratorPostReboot,
 		}
 		suite.Run(t, deploymentRestoration)
+	})
+
+	t.Run("DeploymentRestorationProviderPostReboot", func(t *testing.T) {
+		deploymentRestorationProvider := &TestSuite{
+			numNodes:      2,
+			Name:          "deployment_restoration_provider_post_reboot",
+			restPortIndex: ports[40],
+			p2pPortIndex:  ports[41],
+			runner:        DeploymentRestorationProviderPostReboot,
+		}
+		suite.Run(t, deploymentRestorationProvider)
 	})
 
 	// not dependable test since 'Provisioning' status can sometimes be too quick to catch

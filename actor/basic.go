@@ -167,7 +167,7 @@ func (a *BasicActor) handleMessage(data []byte, srcPeerID peer.ID) {
 	}
 
 	if !a.self.ID.Equal(msg.To.ID) {
-		log.Warnf("message is not for ourselves: %s %s", a.self.ID, msg.To.ID)
+		log.Warnf("message from %s on %s is not for ourselves: %s %s", msg.From, msg.Behavior, a.self.ID, msg.To.ID)
 		return
 	}
 

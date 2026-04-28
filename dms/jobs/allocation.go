@@ -10,6 +10,7 @@ package jobs
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
+	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
@@ -45,7 +47,7 @@ type AllocationInfo struct {
 	ID           string                  `json:"id"`
 	Type         jobtypes.AllocationType `json:"type"`
 	Resources    types.Resources         `json:"resources"`
-	Orchestrator string                  `json:"orchestrator"` // peerID
+	Orchestrator actor.Handle            `json:"orchestrator"`
 	Status       string                  `json:"status"`
 	Executor     string                  `json:"executor"`
 	ExecutionID  string                  `json:"execution_id"`
@@ -96,19 +98,23 @@ type Allocation struct {
 	nodeID             string
 	sourceID           string
 	computeProviderDID string
-	deploymentID       string
+	DeploymentID       string
 	orchestrator       actor.Handle
 	executor           types.Executor
 	executionID        string
 	Job                Job
 	network            network.Network
+
 	// TODO: create separated type for vpn info
-	state struct {
-		subnetIP    string
-		gatewayIP   string
-		portMapping map[int]int
-	}
+	NetState   jobtypes.AllocationNetState
 	resultsDir string
+	ports      map[int]int
+
+	dynamicPortsNum int
+	subnetID        string
+	routingTable    map[string]string
+	dnsRecords      map[string]string
+	portMapping     []jobtypes.AllocationPortMapping
 
 	workDir string
 	lock    sync.Mutex
@@ -128,16 +134,22 @@ type Allocation struct {
 
 	// Liveness reporting state
 	liveness allocationLiveness
+
+	// status update
+	statusCb func(string, jobtypes.AllocationStatus)
 }
 
 func (a *Allocation) setStatus(ns AllocationStatus, msg string, notify bool) {
 	a.lock.Lock()
-	defer a.lock.Unlock()
 	os := a.status
 	a.status = ns
+	a.lock.Unlock()
 
 	if notify && os != ns {
-		a.statusChangeNotify(os, ns, msg)
+		go func() {
+			a.statusChangeNotify(os, ns, msg)
+			a.statusCb(a.ID, ns)
+		}()
 	}
 }
 
@@ -163,6 +175,7 @@ func NewAllocation(
 	contractEventHandler *eventhandler.EventHandler,
 	contractStore TailContractGetter,
 	deploymentID string,
+	statusCb func(string, jobtypes.AllocationStatus),
 ) (*Allocation, error) {
 	if network == nil {
 		return nil, fmt.Errorf("network is nil")
@@ -182,30 +195,30 @@ func NewAllocation(
 	}
 
 	allocation := &Allocation{
-		ID:           id,
-		allocType:    allocType,
-		fs:           fs,
-		nodeID:       details.NodeID,
-		sourceID:     details.SourceID,
-		orchestrator: orchestrator,
-		Job:          details.Job,
-		Actor:        actor,
-		executionID:  executionID.String(),
-		workDir:      workDir,
-		status:       AllocationPending,
-		network:      network,
-		executor:     executor,
-		selfRelease:  selfRelease,
-		state: struct {
-			subnetIP    string
-			gatewayIP   string
-			portMapping map[int]int
-		}{},
+		ID:                   id,
+		allocType:            allocType,
+		fs:                   fs,
+		nodeID:               details.NodeID,
+		sourceID:             details.SourceID,
+		orchestrator:         orchestrator,
+		Job:                  details.Job,
+		Actor:                actor,
+		executionID:          executionID.String(),
+		workDir:              workDir,
+		status:               AllocationPending,
+		network:              network,
+		executor:             executor,
+		selfRelease:          selfRelease,
+		NetState:             jobtypes.AllocationNetState{},
+		ports:                make(map[int]int),
+		routingTable:         make(map[string]string),
+		dnsRecords:           make(map[string]string),
 		createdAt:            time.Now(),
 		contractEventHandler: contractEventHandler,
 		contractStore:        contractStore,
 		computeProviderDID:   actor.Parent().DID.URI,
-		deploymentID:         deploymentID,
+		DeploymentID:         deploymentID,
+		statusCb:             statusCb,
 	}
 
 	// Initialize liveness reporting state
@@ -228,11 +241,179 @@ func (a *Allocation) GetPortMapping() map[int]int {
 	defer a.lock.Unlock()
 
 	ports := make(map[int]int)
-	for i, v := range a.state.portMapping {
+	for i, v := range a.NetState.PortMapping {
 		ports[i] = v
 	}
 
 	return ports
+}
+
+func copyIntMap(input map[int]int) map[int]int {
+	if len(input) == 0 {
+		return map[int]int{}
+	}
+	out := make(map[int]int, len(input))
+	for k, v := range input {
+		out[k] = v
+	}
+	return out
+}
+
+func copyStringMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(input))
+	for k, v := range input {
+		out[k] = v
+	}
+	return out
+}
+
+func copyContractConfigMap(input map[string]types.ContractConfig) map[string]types.ContractConfig {
+	if len(input) == 0 {
+		return map[string]types.ContractConfig{}
+	}
+	out := make(map[string]types.ContractConfig, len(input))
+	for k, v := range input {
+		out[k] = v
+	}
+	return out
+}
+
+func copyProvisionScripts(input map[string][]byte) map[string][]byte {
+	if len(input) == 0 {
+		return map[string][]byte{}
+	}
+	out := make(map[string][]byte, len(input))
+	for k, v := range input {
+		clone := make([]byte, len(v))
+		copy(clone, v)
+		out[k] = clone
+	}
+	return out
+}
+
+func (a *Allocation) SetCommittedPorts(ports map[int]int, dynamicPortsNum int) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	a.ports = copyIntMap(ports)
+	a.dynamicPortsNum = dynamicPortsNum
+}
+
+func (a *Allocation) setSubnetID(subnetID string) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	a.subnetID = subnetID
+}
+
+func (a *Allocation) mergeRoutingTable(entries map[string]string) {
+	if len(entries) == 0 {
+		return
+	}
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	for ip, peerID := range entries {
+		a.routingTable[ip] = peerID
+	}
+}
+
+func (a *Allocation) removeRoutingTableEntries(entries map[string]string) {
+	if len(entries) == 0 {
+		return
+	}
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	for ip := range entries {
+		delete(a.routingTable, ip)
+	}
+}
+
+func (a *Allocation) mergeDNSRecords(records map[string]string) {
+	if len(records) == 0 {
+		return
+	}
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	for domain, ip := range records {
+		a.dnsRecords[domain] = ip
+	}
+}
+
+func (a *Allocation) removeDNSRecords(domains []string) {
+	if len(domains) == 0 {
+		return
+	}
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	for _, domain := range domains {
+		delete(a.dnsRecords, domain)
+	}
+}
+
+// ApplyPersistedNetworkMetadata re-applies persisted network metadata originally
+// obtained via subnet events since needed during restore
+func (a *Allocation) ApplyPersistedNetworkMetadata(
+	subnetID string,
+	routingTable map[string]string,
+	dnsRecords map[string]string,
+	portMapping []jobtypes.AllocationPortMapping,
+) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	a.subnetID = subnetID
+	a.routingTable = copyStringMap(routingTable)
+	a.dnsRecords = copyStringMap(dnsRecords)
+	a.portMapping = append([]jobtypes.AllocationPortMapping(nil), portMapping...)
+}
+
+// PersistState returns a copy of allocation fields required for persistence
+func (a *Allocation) PersistState() jobtypes.AllocationState {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	if a.Actor.Security().PrivKey() == nil {
+		log.Errorw("allocation_persist_state_no_private_key",
+			"labels", string(observability.LabelAllocation),
+			"allocationID", a.ID)
+		return jobtypes.AllocationState{}
+	}
+
+	privKeyBytes, err := crypto.PrivateKeyToBytes(a.Actor.Security().PrivKey())
+	if err != nil {
+		log.Errorf("failed to marshal private key: %v", err)
+		return jobtypes.AllocationState{}
+	}
+
+	return jobtypes.AllocationState{
+		AllocationID: a.ID,
+		PrivKeyB64:   base64.StdEncoding.EncodeToString(privKeyBytes),
+
+		DeploymentID: a.DeploymentID,
+		Type:         a.allocType,
+		Orchestrator: a.orchestrator,
+		Resources:    a.Job.Resources,
+		Execution:    a.Job.Execution,
+
+		ProvisionScripts: copyProvisionScripts(a.Job.ProvisionScripts),
+		Keys:             a.Job.Keys,
+		Volume:           a.Job.Volume,
+		Contracts:        copyContractConfigMap(a.Contracts),
+		NetState: jobtypes.AllocationNetState{
+			SubnetIP:    a.NetState.SubnetIP,
+			GatewayIP:   a.NetState.GatewayIP,
+			PortMapping: copyIntMap(a.NetState.PortMapping),
+		},
+
+		Ports:           copyIntMap(a.ports),
+		DynamicPortsNum: a.dynamicPortsNum,
+		SubnetID:        a.subnetID,
+		PortMapping:     a.portMapping,
+		RoutingTable:    copyStringMap(a.routingTable),
+		DNSRecords:      copyStringMap(a.dnsRecords),
+	}
 }
 
 // findTailContractsForHeadContract finds Tail Contracts associated with a Head Contract
@@ -260,6 +441,14 @@ func (a *Allocation) Run(
 		a.lock.Unlock()
 		a.setStatus(AllocationRunning, "allocation started", true)
 	}()
+
+	// persist runtime network state
+	a.NetState.SubnetIP = subnetIP
+	a.NetState.GatewayIP = gatewayIP
+	a.NetState.PortMapping = copyIntMap(portMapping)
+	if len(portMapping) > 0 {
+		a.ports = copyIntMap(portMapping)
+	}
 
 	if a.status == AllocationRunning {
 		log.Warnw("allocation_already_running",
@@ -370,7 +559,7 @@ func (a *Allocation) Run(
 			EventBase: events.EventBase{Type: events.StartAllocationEvent},
 			AllocationBase: events.AllocationBase{
 				AllocationID:       a.ID,
-				DeploymentID:       a.deploymentID,
+				DeploymentID:       a.DeploymentID,
 				ComputeProviderDID: a.computeProviderDID,
 				HeadContractDID:    headContractDID, // Include Head Contract DID in payload
 			},
@@ -442,7 +631,7 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 		msg, err := actor.Message(
 			a.Actor.Handle(),
 			a.orchestrator,
-			behaviors.NotifyTaskTerminationBehavior,
+			fmt.Sprintf(behaviors.NotifyTaskTerminationBehavior, a.DeploymentID),
 			req,
 			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
 		)
@@ -549,7 +738,7 @@ func (a *Allocation) handleTransience(r *types.ExecutionResult, err error) {
 			EventBase: events.EventBase{Type: events.CompleteAllocationEvent},
 			AllocationBase: events.AllocationBase{
 				AllocationID:       a.ID,
-				DeploymentID:       a.deploymentID,
+				DeploymentID:       a.DeploymentID,
 				ComputeProviderDID: a.computeProviderDID,
 				HeadContractDID:    headContractDID, // Include Head Contract DID in payload
 			},
@@ -581,7 +770,6 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 		return fmt.Errorf("stop execution: %w", err)
 	}
 
-	a.setStatus(AllocationStopped, "allocation stopped", true)
 	log.Debugw("allocation_stopped_execution",
 		"labels", string(observability.LabelAllocation),
 		"allocationID", a.ID)
@@ -644,7 +832,7 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 			EventBase: events.EventBase{Type: events.StopAllocationEvent},
 			AllocationBase: events.AllocationBase{
 				AllocationID:       a.ID,
-				DeploymentID:       a.deploymentID,
+				DeploymentID:       a.DeploymentID,
 				ComputeProviderDID: a.computeProviderDID,
 				HeadContractDID:    headContractDID, // Include Head Contract DID in payload
 			},
@@ -720,7 +908,9 @@ func (a *Allocation) Stop(ctx context.Context) error {
 		return fmt.Errorf("stop execution: %w", err)
 	}
 
-	a.setStatus(AllocationStopped, "allocation stopped", true)
+	if a.Status().Status != AllocationRestarting {
+		a.setStatus(AllocationStopped, "allocation stopped", true)
+	}
 
 	return nil
 }
@@ -779,21 +969,24 @@ func (a *Allocation) Start() error {
 }
 
 func (a *Allocation) Restart(ctx context.Context) error {
-	if a.state.subnetIP == "" {
+	a.setStatus(AllocationRestarting, "restarting allocation", true)
+	if a.NetState.SubnetIP == "" {
 		// if you get this error, did you start the allocation properly before restart?
 		return fmt.Errorf("allocation: state is empty, no subnet ip is provided")
 	}
 
+	// stop is best effort - execution might already be in a stop state.
 	if err := a.Stop(ctx); err != nil {
-		return err
+		log.Warnf("failed to stop allocation during restart: %v", err)
 	}
 
 	if err := a.Start(); err != nil {
 		return err
 	}
 
-	if err := a.Run(ctx, a.state.subnetIP, a.state.gatewayIP, a.state.portMapping); err != nil {
+	if err := a.Run(ctx, a.NetState.SubnetIP, a.NetState.GatewayIP, a.NetState.PortMapping); err != nil {
 		_ = a.Stop(ctx)
+		a.setStatus(AllocationFailed, "allocation run failed during restart", true)
 		return fmt.Errorf("run allocation: %w", err)
 	}
 
@@ -832,12 +1025,12 @@ func (a *Allocation) Info() AllocationInfo {
 	return AllocationInfo{
 		ID:           a.ID,
 		Type:         a.allocType,
-		Orchestrator: a.orchestrator.Address.HostID,
+		Orchestrator: a.orchestrator,
 		Resources:    a.Job.Resources,
 		Status:       string(a.status),
 		Executor:     a.Job.Execution.Type,
 		ExecutionID:  a.ID,
-		UsingPorts:   utils.MapKeysToSlice(a.state.portMapping),
+		UsingPorts:   utils.MapKeysToSlice(a.NetState.PortMapping),
 		CreatedAt:    a.createdAt,
 		StartedAt:    a.startedAt,
 	}
@@ -931,7 +1124,7 @@ func (a *Allocation) sendLivenessReport(ctx context.Context) error {
 
 	return a.sendToOrchestratorWithRetry(
 		ctx,
-		behaviors.NotifyAllocationLivenessBehavior,
+		fmt.Sprintf(behaviors.NotifyAllocationLivenessBehavior, a.DeploymentID),
 		notification,
 		livenessMaxRetries,
 	)
@@ -1060,8 +1253,11 @@ func (a *Allocation) sendToOrchestratorWithRetry(
 // statusChangeNotify sends immediate notification when status changes
 func (a *Allocation) statusChangeNotify(oldStatus, newStatus AllocationStatus, reason string) {
 	if !a.liveness.enabled {
+		log.Warnf("status change notification skipped, push liveness disabled for allocation %s", a.ID)
 		return
 	}
+
+	log.Debugf("status change notification start for alloc: %s - status: %s -> %s ", a.ID, oldStatus, newStatus)
 
 	update := jobtypes.AllocationStatusUpdate{
 		AllocationID: a.ID,
@@ -1074,17 +1270,17 @@ func (a *Allocation) statusChangeNotify(oldStatus, newStatus AllocationStatus, r
 	msg, err := actor.Message(
 		a.Actor.Handle(),
 		a.orchestrator,
-		behaviors.NotifyAllocationStatusBehavior,
+		fmt.Sprintf(behaviors.NotifyAllocationStatusBehavior, a.DeploymentID),
 		update,
 		actor.WithMessageExpiry(uint64(time.Now().Add(livenessReportTimeout).UnixNano())),
 	)
 	if err != nil {
-		log.Debugf("failed to create status update message: %v", err)
+		log.Errorf("failed to create status update message: %v", err)
 		return
 	}
 
 	if err := a.Actor.Send(msg); err != nil {
-		log.Debugf("failed to send status update: %v", err)
+		log.Errorf("failed to send status update: %v", err)
 	}
 }
 

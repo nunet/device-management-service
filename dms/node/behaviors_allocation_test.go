@@ -89,6 +89,7 @@ func TestHandleSubnetCreate(t *testing.T) {
 			node.actor.Handle(),
 			subnetCreateBehavior,
 			orchestrator.SubnetCreateRequest{
+				EnsembleID:   ensembleID,
 				SubnetID:     subnetID,
 				RoutingTable: routingTable,
 			},
@@ -161,7 +162,6 @@ func TestHandleSubnetDestroy(t *testing.T) {
 
 		// create subnet first
 		err = node.network.CreateSubnet(
-			context.Background(),
 			subnetID,
 			"192.168.0.0/24",
 			map[string]string{"192.168.1.1": nVnet.GetHostID().String()})
@@ -241,7 +241,6 @@ func TestHandleSubnetJoin(t *testing.T) {
 
 		// create subnet first
 		err = node.network.CreateSubnet(
-			context.Background(),
 			subnetID,
 			"192.168.0.0/24",
 			map[string]string{"192.168.1.1": sVnet.GetHostID().String()})
@@ -314,6 +313,7 @@ func TestCreateAllocation(t *testing.T) {
 			orchHandle,
 			map[string]types.ContractConfig{},
 			"",
+			nil,
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported executor type: null")
@@ -330,6 +330,7 @@ func TestCreateAllocation(t *testing.T) {
 			orchHandle,
 			map[string]types.ContractConfig{},
 			"",
+			nil,
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported executor type: firecracker")
@@ -359,6 +360,7 @@ func TestCreateAllocation(t *testing.T) {
 			orchHandle,
 			map[string]types.ContractConfig{},
 			"",
+			nil,
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "allocation not committed")
@@ -400,6 +402,7 @@ func TestCreateAllocation(t *testing.T) {
 			orchHandle,
 			map[string]types.ContractConfig{},
 			"deployment-id",
+			nil,
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc)
@@ -824,6 +827,7 @@ func TestHandleAllocationShutdown(t *testing.T) {
 			supervisorHandle,
 			map[string]types.ContractConfig{},
 			"deployment-id",
+			nil,
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc)
@@ -941,6 +945,7 @@ func TestHandleAllocationsList(t *testing.T) {
 			job, supervisorHandle,
 			map[string]types.ContractConfig{},
 			"deployment-id",
+			nil,
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc1)
@@ -950,6 +955,7 @@ func TestHandleAllocationsList(t *testing.T) {
 			job, supervisorHandle,
 			map[string]types.ContractConfig{},
 			"deployment-id",
+			nil,
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, alloc2)

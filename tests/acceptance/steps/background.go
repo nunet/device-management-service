@@ -90,8 +90,6 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 
 	g := new(errgroup.Group)
 
-	netForwardParams := make([]utils.NetFwdParams, 0)
-
 	// all setup for nodes (sp/cp)
 	for _, node := range nodes {
 		g.Go(func() error {
@@ -160,39 +158,12 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 				time.Sleep(5 * time.Second)
 			}
 
-			instanceIP, instancePort, hostIP, hostPort, err := utils.ExtractNetFromAddr(instance, addrs)
-			if err != nil {
-				return fmt.Errorf("failed to extract network from addr: %w", err)
-			}
-
-			netInfo, err := instance.GetNetInfo()
-			if err != nil {
-				return fmt.Errorf("failed to get network info: %w", err)
-			}
-
-			netForwardParams = append(netForwardParams, utils.NetFwdParams{
-				HostIface:    netInfo.HostIface,
-				HostIP:       hostIP,
-				HostPort:     hostPort,
-				InstanceIP:   instanceIP,
-				InstancePort: instancePort,
-				Protocol:     "udp",
-			})
-
 			return nil
 		})
 	}
 
 	err = g.Wait()
 	require.NoError(t, err)
-
-	// create forwards
-	for _, params := range netForwardParams {
-		err = utils.NetworkForwardPort(instances[0].Client, params)
-		if err != nil {
-			return tc.Unwrap(), fmt.Errorf("failed to forward port: %w", err)
-		}
-	}
 
 	tc = tc.WithTokenMap(tokenMap)
 

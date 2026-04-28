@@ -73,10 +73,9 @@ const (
 	BroadcastStatusDiscoveryBehavior = "/broadcast/dms/status"
 	BroadcastStatusDiscoveryTopic    = "/nunet/status"
 
-	EnsembleNamespace     = "/dms/ensemble/%s"
-	AllocationNamespace   = "/dms/allocation"
-	OrchestratorNamespace = "/dms/orchestrator"
-	NodeNamespace         = "/dms/node"
+	EnsembleNamespace   = "/dms/ensemble/%s"
+	AllocationNamespace = "/dms/allocation"
+	NodeNamespace       = "/dms/node"
 
 	AllocationStartBehavior     = AllocationNamespace + "/start"
 	AllocationRestartBehavior   = AllocationNamespace + "/restart"
@@ -91,13 +90,18 @@ const (
 	SubnetDNSAddRecordsBehavior    = AllocationNamespace + "/subnet/dns/add-records"
 	SubnetDNSRemoveRecordsBehavior = AllocationNamespace + "/subnet/dns/remove-records"
 
-	NotifyTaskTerminationBehavior = OrchestratorNamespace + "/task-termination"
+	// Orchestrator behaviors under ensemble namespace
+	OrchestratorEnsembleNamespace = "/dms/orchestrator/%s"
+
+	DeploymentStateBehavior       = OrchestratorEnsembleNamespace + "/deployment/state"
+	NotifyTaskTerminationBehavior = OrchestratorEnsembleNamespace + "/task-termination"
 
 	// Push-based liveness and status reporting
 	// Allocations invoke these on the orchestrator to report their state
-	NotifyAllocationLivenessBehavior = OrchestratorNamespace + "/allocation/liveness"
-	NotifyAllocationStatusBehavior   = OrchestratorNamespace + "/allocation/status"
+	NotifyAllocationLivenessBehavior = OrchestratorEnsembleNamespace + "/allocation/liveness"
+	NotifyAllocationStatusBehavior   = OrchestratorEnsembleNamespace + "/allocation/status"
 
+	// Tokenomics behaviors
 	TokenomicNamespace           = "/dms/tokenomics"
 	ContractCreateBehavior       = TokenomicNamespace + "/contract/create"
 	ContractApproveLocalBehavior = TokenomicNamespace + "/contract/approve_local"

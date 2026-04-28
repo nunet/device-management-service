@@ -80,6 +80,7 @@ type Orchestrator interface {
 	Config() jtypes.EnsembleConfig
 	ID() string
 	ActorPrivateKey() crypto.PrivKey
+	Actor() actor.Actor
 	DeploymentSnapshot() jtypes.DeploymentSnapshot
 	AllocationInfo() map[string]jtypes.AllocationInfo
 	UpdateAllocationStatus()
@@ -169,6 +170,7 @@ func NewOrchestrator(
 		contractEventHandler:  contractEventHandler,
 		contracts:             contracts,
 	}
+	o.supervisor.SetAllocationStatusUpdater(o.updateAllocationStatusFromSupervisor)
 
 	err = o.RegisterBehaviors()
 	if err != nil {
@@ -176,6 +178,29 @@ func NewOrchestrator(
 	}
 
 	return o, nil
+}
+
+func (o *BasicOrchestrator) updateAllocationStatusFromSupervisor(allocationID string, status jtypes.AllocationStatus) {
+	o.lock.Lock()
+	if info, ok := o.allocs[allocationID]; ok {
+		info.Status = status
+		info.Timestamp = time.Now().Unix()
+		o.allocs[allocationID] = info
+	}
+	o.lock.Unlock()
+
+	allocID, err := types.ParseAllocationID(allocationID)
+	if err != nil {
+		log.Debugf("failed to parse allocation ID %s: %v", allocationID, err)
+		return
+	}
+
+	manifest := o.Manifest()
+	if alloc, ok := manifest.Allocations[allocID.ManifestKey()]; ok {
+		alloc.Status = status
+		manifest.Allocations[allocID.ManifestKey()] = alloc
+		o.updateManifest(manifest)
+	}
 }
 
 func (o *BasicOrchestrator) SetStatus(status jtypes.DeploymentStatus) {
@@ -857,9 +882,18 @@ func (o *BasicOrchestrator) UpdateAllocationStatus() {
 
 func (o *BasicOrchestrator) RegisterBehaviors() error {
 	orchestratorBehaviors := map[string]func(actor.Envelope){
-		behaviors.NotifyTaskTerminationBehavior:    o.handleTaskTermination,
-		behaviors.NotifyAllocationLivenessBehavior: o.handleAllocationLiveness,
-		behaviors.NotifyAllocationStatusBehavior:   o.handleAllocationStatusUpdate,
+		fmt.Sprintf(
+			behaviors.NotifyTaskTerminationBehavior,
+			o.id): o.handleTaskTermination,
+		fmt.Sprintf(
+			behaviors.NotifyAllocationLivenessBehavior,
+			o.id): o.handleAllocationLiveness,
+		fmt.Sprintf(
+			behaviors.NotifyAllocationStatusBehavior,
+			o.id): o.handleAllocationStatusUpdate,
+		fmt.Sprintf(
+			behaviors.DeploymentStateBehavior,
+			o.id): o.handleDeploymentState,
 	}
 
 	for b, handler := range orchestratorBehaviors {
@@ -884,7 +918,9 @@ func (o *BasicOrchestrator) grantOrchestratorCaps(alloc did.DID) error {
 	err = o.actor.Security().Grant(
 		alloc,
 		oDID,
-		[]ucan.Capability{behaviors.OrchestratorNamespace},
+		[]ucan.Capability{
+			ucan.Capability(fmt.Sprintf(behaviors.OrchestratorEnsembleNamespace, o.ID())),
+		},
 		grantOrchestratorCapsFrequency,
 	)
 	if err != nil {
@@ -906,7 +942,10 @@ func (o *BasicOrchestrator) grantOrchestratorCaps(alloc did.DID) error {
 			err := o.actor.Security().Grant(
 				alloc,
 				o.actor.Handle().DID,
-				[]ucan.Capability{},
+				[]ucan.Capability{
+					ucan.Capability(
+						fmt.Sprintf(behaviors.OrchestratorEnsembleNamespace, o.ID())),
+				},
 				grantOrchestratorCapsFrequency,
 			)
 			if err != nil {
@@ -922,4 +961,25 @@ func (o *BasicOrchestrator) grantOrchestratorCaps(alloc did.DID) error {
 
 func (o *BasicOrchestrator) Done() <-chan struct{} {
 	return o.ctx.Done()
+}
+
+func (o *BasicOrchestrator) sendReply(msg actor.Envelope, payload interface{}) {
+	var opt []actor.MessageOption
+	if msg.IsBroadcast() {
+		opt = append(opt, actor.WithMessageSource(o.actor.Handle()))
+	}
+
+	reply, err := actor.ReplyTo(msg, payload, opt...)
+	if err != nil {
+		log.Debugf("creating reply: %s", err)
+		return
+	}
+
+	if err := o.actor.Send(reply); err != nil {
+		log.Debugf("sending reply: %s", err)
+	}
+}
+
+func (o *BasicOrchestrator) Actor() actor.Actor {
+	return o.actor
 }

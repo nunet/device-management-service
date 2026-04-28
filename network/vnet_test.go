@@ -371,7 +371,7 @@ func TestMiscNetworkMethods(t *testing.T) {
 		charlieID := createEntity(t)
 		daveID := createEntity(t)
 		rt := map[string]string{aliceID.String(): aliceIP, bobID.String(): bobIP}
-		assert.NoError(t, alice.CreateSubnet(context.Background(), "192.168.0.0/24", subnetID, rt))
+		assert.NoError(t, alice.CreateSubnet("192.168.0.0/24", subnetID, rt))
 
 		// Destroy subnet
 		assert.NoError(t, alice.DestroySubnet(subnetID))

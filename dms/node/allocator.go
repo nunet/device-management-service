@@ -43,6 +43,10 @@ var (
 	ErrNoHardwareCapacity = fmt.Errorf("no capacity left on the hardware")
 )
 
+const (
+	DefaultCommitTimeout time.Duration = 30 * time.Second
+)
+
 // TODO: move port allocator stuffs to other file
 
 // portAllocator keeps track of port allocations and manages state.
@@ -216,7 +220,7 @@ type Allocator interface {
 		resources types.CommittedResources,
 		ports map[int]int,
 		numDynamicPorts int,
-		expiry int64,
+		expiry time.Duration,
 	) error
 	// Uncommit uncommits resources and ports for an allocation.
 	Uncommit(ctx context.Context, allocationID string) error
@@ -232,6 +236,7 @@ type Allocator interface {
 		contracts map[string]types.ContractConfig,
 		contractEventHandler *eventhandler.EventHandler,
 		deploymentID string,
+		statusCb func(string, jobtypes.AllocationStatus),
 	) (*jobs.Allocation, error)
 	// Release releases allocated resources and ports for an allocation.
 	Release(ctx context.Context, allocationID string) error
@@ -244,6 +249,12 @@ type Allocator interface {
 	GetAllocations() map[string]*jobs.Allocation
 	// GetAllocation returns a specific allocation.
 	GetAllocation(allocationID string) (*jobs.Allocation, error)
+
+	// RestoreAllocation restores an allocation with the given resources and ports.
+	RestoreAllocCommit(
+		ctx context.Context, allocationID string,
+		resources types.Resources, ports map[int]int,
+		numDynamicPorts int) error
 }
 
 // allocator is the implementation of the Allocator interface.
@@ -256,6 +267,8 @@ type allocator struct {
 	allocations        map[string]*jobs.Allocation
 	monitoredEnsembles map[string]struct{}
 	commits            map[string]int64
+	commitPorts        map[string]map[int]int
+	commitDynamicPorts map[string]int
 	workDir            string
 	hostID             string
 
@@ -270,6 +283,17 @@ type allocator struct {
 }
 
 var _ Allocator = (*allocator)(nil)
+
+func copyPortsMap(input map[int]int) map[int]int {
+	if len(input) == 0 {
+		return map[int]int{}
+	}
+	out := make(map[int]int, len(input))
+	for k, v := range input {
+		out[k] = v
+	}
+	return out
+}
 
 // newAllocator returns a new default allocator
 func newAllocator(
@@ -290,6 +314,8 @@ func newAllocator(
 		network:            network,
 		allocations:        make(map[string]*jobs.Allocation),
 		monitoredEnsembles: make(map[string]struct{}),
+		commitPorts:        make(map[string]map[int]int),
+		commitDynamicPorts: make(map[string]int),
 		fs:                 fs,
 		workDir:            workDir,
 		hostID:             hostID,
@@ -381,7 +407,7 @@ func (a *allocator) Commit(ctx context.Context,
 	resources types.CommittedResources,
 	ports map[int]int,
 	numDynamicPorts int,
-	expiry int64,
+	expiry time.Duration,
 ) error {
 	a.lock.Lock()
 	defer a.lock.Unlock()
@@ -435,7 +461,46 @@ func (a *allocator) Commit(ctx context.Context,
 	}
 
 	// store the commit
-	a.commits[allocationID] = expiry
+	a.commits[allocationID] = time.Now().Add(expiry).Unix()
+	a.commitPorts[allocationID] = copyPortsMap(ports)
+	// TODO dynamic ports should be the list of allocated ports
+	a.commitDynamicPorts[allocationID] = numDynamicPorts
+
+	return nil
+}
+
+func (a *allocator) RestoreAllocCommit(
+	ctx context.Context, allocationID string,
+	resources types.Resources, ports map[int]int,
+	numDynamicPorts int,
+) error {
+	// commit the resources and make sure the executor is still live
+	// if executor is live, check if ports are in use by it
+	// if all good, allocate and restore
+	// Check against the actual hardware usage to ensure dms can guarantee the commitment
+	hasCapacity, err := a.hardware.CheckCapacity(resources)
+	if err != nil {
+		return fmt.Errorf("check hardware capacity: %w", err)
+	}
+
+	if !hasCapacity {
+		return ErrNoHardwareCapacity
+	}
+
+	// commit the resources
+	if err := a.resources.CommitResources(ctx, types.CommittedResources{
+		Resources:    resources,
+		AllocationID: allocationID,
+	}); err != nil {
+		return fmt.Errorf("commit resources for restore: %w", err)
+	}
+
+	// ports are going to be used by the execution if it's live
+
+	// store the commit
+	a.commits[allocationID] = time.Now().Add(DefaultCommitTimeout).Unix()
+	a.commitPorts[allocationID] = copyPortsMap(ports)
+	a.commitDynamicPorts[allocationID] = numDynamicPorts
 
 	return nil
 }
@@ -461,6 +526,8 @@ func (a *allocator) Uncommit(ctx context.Context, allocationID string) error {
 	// remove the commit from the state
 	a.lock.Lock()
 	delete(a.commits, allocationID)
+	delete(a.commitPorts, allocationID)
+	delete(a.commitDynamicPorts, allocationID)
 	a.lock.Unlock()
 
 	log.Debugf("uncommitted allocation %s", allocationID)
@@ -527,6 +594,7 @@ func (a *allocator) Allocate(
 	contracts map[string]types.ContractConfig,
 	contractEventHandler *eventhandler.EventHandler,
 	deploymentID string,
+	statusCb func(string, jobtypes.AllocationStatus),
 ) (*jobs.Allocation, error) {
 	// Ensure that the allocation is committed
 	a.lock.Lock()
@@ -571,10 +639,12 @@ func (a *allocator) Allocate(
 		contractEventHandler,
 		a.tailContractGet,
 		deploymentID,
+		statusCb,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create allocation: %w", err)
 	}
+	allocation.SetCommittedPorts(a.commitPorts[allocationID], a.commitDynamicPorts[allocationID])
 
 	allocation.Contracts = contracts
 
@@ -586,6 +656,8 @@ func (a *allocator) Allocate(
 
 	// delete the commit and store the allocation
 	delete(a.commits, allocationID)
+	delete(a.commitPorts, allocationID)
+	delete(a.commitDynamicPorts, allocationID)
 	a.allocations[allocationID] = allocation
 
 	a.registerEnsembleMonitor(types.EnsembleIDFromAllocationID(allocation.ID))

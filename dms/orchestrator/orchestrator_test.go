@@ -1103,7 +1103,7 @@ func TestHandleTaskTermination(t *testing.T) {
 			msg, err := actor.Message(
 				provider.handle,
 				orch.actor.Handle(),
-				behaviors.NotifyTaskTerminationBehavior,
+				fmt.Sprintf(behaviors.NotifyTaskTerminationBehavior, ensembleID),
 				tt.notification,
 				actor.WithMessageSource(provider.handle),
 				actor.WithMessageReplyTo("replyto/123"),

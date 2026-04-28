@@ -11,6 +11,7 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"sync"
 	"testing"
@@ -279,18 +280,20 @@ func TestServiceAllocationSendsLivenessHeartbeats(t *testing.T) {
 	orchActor, orchCap, orchRootTrust, orchRootDID := newActor(t, orchPriv, orchNet)
 	require.NoError(t, orchActor.Start())
 
+	ensembleID := "test-ensemble-liveness"
+
 	// Grant capabilities for liveness reporting
 	actor.AllowReciprocal(t, orchCap, orchRootTrust, orchRootDID,
-		node.actor.Handle().DID, behaviors.NotifyAllocationLivenessBehavior)
+		node.actor.Handle().DID, fmt.Sprintf(behaviors.NotifyAllocationLivenessBehavior, ensembleID))
 	actor.AllowReciprocal(t, orchCap, orchRootTrust, orchRootDID,
-		node.actor.Handle().DID, behaviors.NotifyAllocationStatusBehavior)
+		node.actor.Handle().DID, fmt.Sprintf(behaviors.NotifyAllocationStatusBehavior, ensembleID))
 
 	// Track received heartbeats
 	var heartbeatsMu sync.Mutex
 	receivedHeartbeats := []jobtypes.AllocationLivenessNotification{}
 
 	// Add liveness behavior to orchestrator
-	require.NoError(t, orchActor.AddBehavior(behaviors.NotifyAllocationLivenessBehavior,
+	require.NoError(t, orchActor.AddBehavior(fmt.Sprintf(behaviors.NotifyAllocationLivenessBehavior, ensembleID),
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 
@@ -325,7 +328,7 @@ func TestServiceAllocationSendsLivenessHeartbeats(t *testing.T) {
 			AllocationID: allocationID,
 			Resources:    resources,
 		},
-		nil, 0, time.Now().Add(5*time.Minute).Unix(),
+		nil, 0, time.Minute,
 	)
 	require.NoError(t, err)
 
@@ -355,7 +358,8 @@ func TestServiceAllocationSendsLivenessHeartbeats(t *testing.T) {
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil, // contractEventHandler
 		nil, // contractStore
-		"",
+		ensembleID,
+		func(_ string, _ jobtypes.AllocationStatus) {},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, allocation)
@@ -417,18 +421,20 @@ func TestServiceAllocationSendsStatusChangeNotification(t *testing.T) {
 	mockOnboarding(t, node, MockTotalCPU/2, MockTotalRAM/2, MockTotalDisk/2)
 
 	// Create orchestrator
+	ensembleID := "test-ensemble-status-change"
 	orchNet, orchPriv := setupTestNetwork(t, substrate)
 	orchActor, orchCap, orchRootTrust, orchRootDID := newActor(t, orchPriv, orchNet)
 	require.NoError(t, orchActor.Start())
 
 	// Grant capabilities
 	actor.AllowReciprocal(t, orchCap, orchRootTrust, orchRootDID,
-		node.actor.Handle().DID, behaviors.NotifyAllocationStatusBehavior)
+		node.actor.Handle().DID, fmt.Sprintf(behaviors.NotifyAllocationStatusBehavior, ensembleID))
 
 	// Track status updates
 	statusUpdates := make(chan jobtypes.AllocationStatusUpdate, 10)
 
-	require.NoError(t, orchActor.AddBehavior(behaviors.NotifyAllocationStatusBehavior,
+	require.NoError(t, orchActor.AddBehavior(
+		fmt.Sprintf(behaviors.NotifyAllocationStatusBehavior, ensembleID),
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 
@@ -457,7 +463,7 @@ func TestServiceAllocationSendsStatusChangeNotification(t *testing.T) {
 			AllocationID: allocationID,
 			Resources:    resources,
 		},
-		nil, 0, time.Now().Add(5*time.Minute).Unix(),
+		nil, 0, time.Minute,
 	)
 	require.NoError(t, err)
 
@@ -486,7 +492,8 @@ func TestServiceAllocationSendsStatusChangeNotification(t *testing.T) {
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil, // contractEventHandler
 		nil, // contractStore
-		"",
+		ensembleID,
+		func(_ string, _ jobtypes.AllocationStatus) {},
 	)
 	require.NoError(t, err)
 
@@ -531,7 +538,9 @@ func TestAllocationLivenessDisabled(t *testing.T) {
 	heartbeatReceived := false
 	var heartbeatMu sync.Mutex
 
-	require.NoError(t, orchActor.AddBehavior(behaviors.NotifyAllocationLivenessBehavior,
+	ensembleID := "test-ensemble-liveness-disabled"
+
+	require.NoError(t, orchActor.AddBehavior(fmt.Sprintf(behaviors.NotifyAllocationLivenessBehavior, ensembleID),
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 			heartbeatMu.Lock()
@@ -569,7 +578,8 @@ func TestAllocationLivenessDisabled(t *testing.T) {
 		func() error { return nil },
 		nil, // contractEventHandler
 		nil, // contractStore
-		"",
+		ensembleID,
+		func(_ string, _ jobtypes.AllocationStatus) {},
 	)
 	require.NoError(t, err)
 
@@ -605,7 +615,9 @@ func TestTaskAllocationDoesNotSendPeriodicHeartbeats(t *testing.T) {
 	heartbeatReceived := false
 	var heartbeatMu sync.Mutex
 
-	require.NoError(t, orchActor.AddBehavior(behaviors.NotifyAllocationLivenessBehavior,
+	ensembleID := "test-ensemble-task-liveness"
+
+	require.NoError(t, orchActor.AddBehavior(fmt.Sprintf(behaviors.NotifyAllocationLivenessBehavior, ensembleID),
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 			heartbeatMu.Lock()
@@ -643,7 +655,8 @@ func TestTaskAllocationDoesNotSendPeriodicHeartbeats(t *testing.T) {
 		func() error { return nil },
 		nil, // contractEventHandler
 		nil, // contractStore
-		"",
+		ensembleID,
+		func(_ string, _ jobtypes.AllocationStatus) {},
 	)
 	require.NoError(t, err)
 	require.NoError(t, allocation.Start())
@@ -673,19 +686,20 @@ func TestAllocationWithCustomHealthcheck(t *testing.T) {
 	mockOnboarding(t, node, MockTotalCPU/2, MockTotalRAM/2, MockTotalDisk/2)
 
 	// Create orchestrator
+	ensembleID := "test-ensemble-custom-healthcheck"
 	orchNet, orchPriv := setupTestNetwork(t, substrate)
 	orchActor, orchCap, orchRootTrust, orchRootDID := newActor(t, orchPriv, orchNet)
 	require.NoError(t, orchActor.Start())
 
 	// Grant capabilities
 	actor.AllowReciprocal(t, orchCap, orchRootTrust, orchRootDID,
-		node.actor.Handle().DID, behaviors.NotifyAllocationLivenessBehavior)
+		node.actor.Handle().DID, fmt.Sprintf(behaviors.NotifyAllocationLivenessBehavior, ensembleID))
 
 	// Track heartbeats and their health status
 	var heartbeatsMu sync.Mutex
 	healthStatuses := []jobtypes.HealthStatus{}
 
-	require.NoError(t, orchActor.AddBehavior(behaviors.NotifyAllocationLivenessBehavior,
+	require.NoError(t, orchActor.AddBehavior(fmt.Sprintf(behaviors.NotifyAllocationLivenessBehavior, ensembleID),
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 
@@ -716,7 +730,7 @@ func TestAllocationWithCustomHealthcheck(t *testing.T) {
 			AllocationID: allocationID,
 			Resources:    resources,
 		},
-		nil, 0, time.Now().Add(5*time.Minute).Unix(),
+		nil, 0, time.Minute,
 	)
 	require.NoError(t, err)
 
@@ -743,7 +757,8 @@ func TestAllocationWithCustomHealthcheck(t *testing.T) {
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil, // contractEventHandler
 		nil, // contractStore
-		"",
+		ensembleID,
+		func(_ string, _ jobtypes.AllocationStatus) {},
 	)
 	require.NoError(t, err)
 
@@ -805,19 +820,20 @@ func TestAllocationWithFailingHealthcheck(t *testing.T) {
 	mockOnboarding(t, node, MockTotalCPU/2, MockTotalRAM/2, MockTotalDisk/2)
 
 	// Create orchestrator
+	ensembleID := "test-ensemble-failing-healthcheck"
 	orchNet, orchPriv := setupTestNetwork(t, substrate)
 	orchActor, orchCap, orchRootTrust, orchRootDID := newActor(t, orchPriv, orchNet)
 	require.NoError(t, orchActor.Start())
 
 	// Grant capabilities
 	actor.AllowReciprocal(t, orchCap, orchRootTrust, orchRootDID,
-		node.actor.Handle().DID, behaviors.NotifyAllocationLivenessBehavior)
+		node.actor.Handle().DID, fmt.Sprintf(behaviors.NotifyAllocationLivenessBehavior, ensembleID))
 
 	// Track health statuses
 	var heartbeatsMu sync.Mutex
 	healthStatuses := []jobtypes.HealthStatus{}
 
-	require.NoError(t, orchActor.AddBehavior(behaviors.NotifyAllocationLivenessBehavior,
+	require.NoError(t, orchActor.AddBehavior(fmt.Sprintf(behaviors.NotifyAllocationLivenessBehavior, ensembleID),
 		func(msg actor.Envelope) {
 			defer msg.Discard()
 
@@ -845,7 +861,7 @@ func TestAllocationWithFailingHealthcheck(t *testing.T) {
 			AllocationID: allocationID,
 			Resources:    resources,
 		},
-		nil, 0, time.Now().Add(5*time.Minute).Unix(),
+		nil, 0, time.Minute,
 	)
 	require.NoError(t, err)
 
@@ -872,7 +888,8 @@ func TestAllocationWithFailingHealthcheck(t *testing.T) {
 		func() error { return node.allocator.Release(ctx, allocationID) },
 		nil, // contractEventHandler
 		nil, // contractStore
-		"",
+		ensembleID,
+		func(_ string, _ jobtypes.AllocationStatus) {},
 	)
 	require.NoError(t, err)
 

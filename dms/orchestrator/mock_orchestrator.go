@@ -316,3 +316,7 @@ func (m *MockOrchestratorRegistry) GetDeployment(orchestratorID string) (*jtypes
 
 	return view, nil
 }
+
+func (m *MockOrchestrator) Actor() actor.Actor {
+	return m.actor
+}

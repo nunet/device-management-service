@@ -175,6 +175,7 @@ func TestNew(t *testing.T) {
 			&provider.Registry{},
 			&gatewastore.Store{},
 			&payment_quote.Store{},
+			cloverDB.NewGenericRepository[jobtypes.AllocationsStatePersist](db),
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "onboarding is nil")
@@ -206,6 +207,7 @@ func TestNew(t *testing.T) {
 			&provider.Registry{},
 			&gatewastore.Store{},
 			&payment_quote.Store{},
+			cloverDB.NewGenericRepository[jobtypes.AllocationsStatePersist](db),
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "root capability context is nil")
@@ -236,6 +238,7 @@ func TestNew(t *testing.T) {
 			&provider.Registry{},
 			&gatewastore.Store{},
 			&payment_quote.Store{},
+			cloverDB.NewGenericRepository[jobtypes.AllocationsStatePersist](db),
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "hostID is empty")
@@ -267,6 +270,7 @@ func TestNew(t *testing.T) {
 			&provider.Registry{},
 			&gatewastore.Store{},
 			&payment_quote.Store{},
+			cloverDB.NewGenericRepository[jobtypes.AllocationsStatePersist](db),
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "network is nil")
@@ -298,6 +302,7 @@ func TestNew(t *testing.T) {
 			&provider.Registry{},
 			&gatewastore.Store{},
 			&payment_quote.Store{},
+			cloverDB.NewGenericRepository[jobtypes.AllocationsStatePersist](db),
 		)
 		assert.NoError(t, err)
 		assert.NotNil(t, node)

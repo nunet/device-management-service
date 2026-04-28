@@ -1000,7 +1000,7 @@ func TestRestoreDeployment(t *testing.T) {
 		err := orch.actor.Security().Grant(
 			provider1.actor.Handle().DID,
 			orch.actor.Handle().DID,
-			[]ucan.Capability{behaviors.OrchestratorNamespace},
+			[]ucan.Capability{behaviors.OrchestratorEnsembleNamespace},
 			5*time.Minute,
 		)
 		require.NoError(t, err)
@@ -1008,7 +1008,7 @@ func TestRestoreDeployment(t *testing.T) {
 		err = orch.actor.Security().Grant(
 			provider2.actor.Handle().DID,
 			orch.actor.Handle().DID,
-			[]ucan.Capability{behaviors.OrchestratorNamespace},
+			[]ucan.Capability{behaviors.OrchestratorEnsembleNamespace},
 			5*time.Minute,
 		)
 		require.NoError(t, err)
@@ -1016,7 +1016,7 @@ func TestRestoreDeployment(t *testing.T) {
 		err = provider1.actor.Security().Grant(
 			orch.actor.Handle().DID,
 			provider1.actor.Handle().DID,
-			[]ucan.Capability{behaviors.OrchestratorNamespace},
+			[]ucan.Capability{behaviors.OrchestratorEnsembleNamespace},
 			5*time.Minute,
 		)
 		require.NoError(t, err)
@@ -1024,7 +1024,7 @@ func TestRestoreDeployment(t *testing.T) {
 		err = provider2.actor.Security().Grant(
 			orch.actor.Handle().DID,
 			provider2.actor.Handle().DID,
-			[]ucan.Capability{behaviors.OrchestratorNamespace},
+			[]ucan.Capability{behaviors.OrchestratorEnsembleNamespace},
 			5*time.Minute,
 		)
 		require.NoError(t, err)
@@ -1252,7 +1252,7 @@ func TestRestoreDeployment(t *testing.T) {
 		err := orch.actor.Security().Grant(
 			provider.actor.Handle().DID,
 			orch.actor.Handle().DID,
-			[]ucan.Capability{behaviors.OrchestratorNamespace},
+			[]ucan.Capability{behaviors.OrchestratorEnsembleNamespace},
 			5*time.Minute,
 		)
 		require.NoError(t, err)
@@ -1261,7 +1261,7 @@ func TestRestoreDeployment(t *testing.T) {
 		err = provider.actor.Security().Grant(
 			orch.actor.Handle().DID,
 			provider.actor.Handle().DID,
-			[]ucan.Capability{behaviors.OrchestratorNamespace},
+			[]ucan.Capability{behaviors.OrchestratorEnsembleNamespace},
 			5*time.Minute,
 		)
 		require.NoError(t, err)

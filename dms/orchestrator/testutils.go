@@ -296,7 +296,7 @@ func (dms *TestDMS) MockDeploymentBehaviors(t *testing.T, ensembleID string, bid
 					err = orchestratorActor[0].Security().Grant(
 						allocationActor.Handle().DID,
 						orchestratorActor[0].Handle().DID,
-						[]ucan.Capability{behaviors.OrchestratorNamespace},
+						[]ucan.Capability{behaviors.OrchestratorEnsembleNamespace},
 						5*time.Minute,
 					)
 					require.NoError(t, err)
