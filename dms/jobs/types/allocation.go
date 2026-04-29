@@ -9,6 +9,7 @@
 package jobtypes
 
 import (
+	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -18,12 +19,17 @@ type AllocationStatus string
 const (
 	AllocationPending    AllocationStatus = "pending"
 	AllocationRunning    AllocationStatus = "running"
+	AllocationRestarting AllocationStatus = "restarting"
 	AllocationStopped    AllocationStatus = "stopped"
 	AllocationFailed     AllocationStatus = "failed"
 	AllocationCompleted  AllocationStatus = "completed"
 	AllocationTerminated AllocationStatus = "terminated"
 	AllocationStandby    AllocationStatus = "standby" // Allocation is in standby mode (redundancy)
 )
+
+func (s AllocationStatus) String() string {
+	return string(s)
+}
 
 // HealthCheckType represents the type of health check performed
 type HealthCheckType string
@@ -91,4 +97,54 @@ type AllocationInfo struct {
 	DNSName        string                  `json:"dns_name"`
 	IP             string                  `json:"ip"`
 	Timestamp      int64                   `json:"timestamp"`
+}
+
+type AllocationNetState struct {
+	SubnetIP    string
+	GatewayIP   string
+	PortMapping map[int]int
+}
+
+type AllocationPortMapping struct {
+	SubnetID   string `json:"subnet_id"`
+	Protocol   string `json:"protocol"`
+	SourceIP   string `json:"source_ip"`
+	SourcePort string `json:"source_port"`
+	DestIP     string `json:"dest_ip"`
+	DestPort   string `json:"dest_port"`
+}
+
+// AllocationState is a complete snapshot of allocation state used by
+// node for persistence and recovery
+type AllocationState struct {
+	AllocationID string `json:"allocation_id"`
+	PrivKeyB64   string `json:"priv_key"`
+
+	DeploymentID string           `json:"deployment_id"`
+	Type         AllocationType   `json:"type"`
+	Orchestrator actor.Handle     `json:"orchestrator"`
+	Resources    types.Resources  `json:"resources"`
+	Execution    types.SpecConfig `json:"execution"`
+
+	ProvisionScripts map[string][]byte               `json:"provision_scripts"`
+	Keys             []types.AllocationKey           `json:"keys"`
+	Volume           []types.VolumeConfig            `json:"volume"`
+	Contracts        map[string]types.ContractConfig `json:"contracts"`
+	NetState         AllocationNetState              `json:"net_state"`
+
+	Ports           map[int]int             `json:"ports"`
+	DynamicPortsNum int                     `json:"dynamic_ports_num"`
+	PortMapping     []AllocationPortMapping `json:"port_mapping"`
+	SubnetID        string                  `json:"subnet_id"`
+	RoutingTable    map[string]string       `json:"routing_table"` // can get updated
+	DNSRecords      map[string]string       `json:"dns_records"`
+}
+
+type AllocationsStatePersist struct {
+	types.BaseDBModel
+	EnsembleID   string                     `json:"ensemble_id"`
+	Orchestrator actor.Handle               `json:"orchestrator"`
+	SubnetCIDR   string                     `json:"subnet_cidr"`   // node handled on create
+	RoutingTable map[string]string          `json:"routing_table"` // node handled on create
+	Allocations  map[string]AllocationState `json:"allocations"`
 }

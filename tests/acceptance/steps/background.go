@@ -89,7 +89,6 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 	tokenMap := make(map[string]string)
 
 	g := new(errgroup.Group)
-
 	netForwardParams := make([]utils.NetFwdParams, 0)
 
 	// all setup for nodes (sp/cp)
@@ -150,7 +149,7 @@ func theFollowingNodes(ctx context.Context, table *godog.Table) (context.Context
 
 				addrs = strings.Split(peerInfo.Address, ", ")
 
-				if len(addrs) >= 5 {
+				if len(addrs) >= 7 {
 					break
 				}
 				try++

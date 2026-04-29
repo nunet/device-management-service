@@ -101,14 +101,14 @@ func (s *ExecutorTestSuite) TestRemoveContainer() {
 	err = s.executor.WaitForStatus(ctx, request.ExecutionID, types.ExecutionStatusRunning, nil)
 	s.NoError(err)
 
-	cont, err := s.executor.FindRunningContainer(ctx, request.JobID, request.ExecutionID)
+	cont, err := s.executor.FindRunningContainer(ctx, request.JobID)
 	s.NoError(err)
 	s.NotEmpty(cont)
 
 	err = s.executor.Remove(request.ExecutionID, removeContainerTimeout)
 	s.NoError(err)
 
-	cont, err = s.executor.FindRunningContainer(ctx, request.JobID, request.ExecutionID)
+	cont, err = s.executor.FindRunningContainer(ctx, request.JobID)
 	s.Error(err)
 	s.Empty(cont)
 }
@@ -263,7 +263,7 @@ func (s *ExecutorTestSuite) TestRunJobWithVolumes() {
 // TestFindRunningContainerNotFound tests finding a container that doesn't exist.
 func (s *ExecutorTestSuite) TestFindRunningContainerNotFound() {
 	ctx := context.Background()
-	containerID, err := s.executor.FindRunningContainer(ctx, "non-existent-job", "non-existent-execution")
+	containerID, err := s.executor.FindRunningContainer(ctx, "non-existent-job")
 	s.Error(err)
 	s.Empty(containerID)
 

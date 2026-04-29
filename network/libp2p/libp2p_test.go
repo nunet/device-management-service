@@ -782,7 +782,7 @@ func TestAdversarial_RawQUIC(t *testing.T) {
 		peer1, peer2, peer3 := createPeers(t, 9101, 9102, 9103, 3040, 3041, 3042)
 
 		peer2.Host.Peerstore().AddAddrs(peer1.Host.ID(), []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/127.0.0.1/udp/3040/quic-v1")}, peerstore.PermanentAddrTTL)
-		require.NoError(t, peer1.CreateSubnet(context.TODO(), "test_subnet", "10.20.20.0/24", map[string]string{}))
+		require.NoError(t, peer1.CreateSubnet("test_subnet", "10.20.20.0/24", map[string]string{}))
 
 		conn, _, err := peer2.RawQUICConnectLocal(peer1.Host.ID(), "test_subnet")
 		require.Error(t, err, "failed to dial QUIC address: CRYPTO_ERROR 0x12a (local): peer not a member of any subnet, invalidating cert")
@@ -796,12 +796,12 @@ func TestAdversarial_RawQUIC(t *testing.T) {
 	t.Run("peer2 is not adversarial", func(t *testing.T) {
 		peer1, peer2, _ := createPeers(t, 9201, 9202, 9203, 3043, 3044, 3045)
 
-		require.NoError(t, peer1.CreateSubnet(context.TODO(), "test_subnet", "10.20.20.0/24", map[string]string{
+		require.NoError(t, peer1.CreateSubnet("test_subnet", "10.20.20.0/24", map[string]string{
 			"10.20.20.3": peer2.Host.ID().String(),
 			"10.20.20.2": peer1.Host.ID().String(),
 		}))
 
-		require.NoError(t, peer2.CreateSubnet(context.TODO(), "test_subnet", "10.20.20.0/24", map[string]string{
+		require.NoError(t, peer2.CreateSubnet("test_subnet", "10.20.20.0/24", map[string]string{
 			"10.20.20.3": peer2.Host.ID().String(),
 			"10.20.20.2": peer1.Host.ID().String(),
 		}))
@@ -828,11 +828,11 @@ func TestAdversarial_RawQUIC(t *testing.T) {
 	t.Run("peer2 is member of subnet locally, but adversarial", func(t *testing.T) {
 		peer1, peer2, _ := createPeers(t, 9301, 9302, 9303, 3046, 3047, 3048)
 
-		require.NoError(t, peer1.CreateSubnet(context.TODO(), "test_subnet", "10.20.20.0/24", map[string]string{
+		require.NoError(t, peer1.CreateSubnet("test_subnet", "10.20.20.0/24", map[string]string{
 			"10.20.20.2": peer1.Host.ID().String(),
 		}))
 
-		require.NoError(t, peer2.CreateSubnet(context.TODO(), "test_subnet", "10.20.20.0/24", map[string]string{
+		require.NoError(t, peer2.CreateSubnet("test_subnet", "10.20.20.0/24", map[string]string{
 			"10.20.20.3": peer2.Host.ID().String(),
 			"10.20.20.2": peer1.Host.ID().String(),
 		}))

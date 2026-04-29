@@ -19,6 +19,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -74,6 +75,7 @@ type SummaryNode struct {
 }
 
 type Summary struct {
+	mx sync.RWMutex
 	// Nodes is a map of test nodes and their state.
 	Nodes map[string]*SummaryNode
 	// NodeConns is a map of active connections between nodes, sourced from nodes' logs.
@@ -104,6 +106,10 @@ func (s *Summary) String() string {
 	for _, targets := range s.NodeTestConns {
 		conns += len(targets)
 	}
+
+	s.mx.RLock()
+	defer s.mx.RUnlock()
+
 	ret := f("\nSUMMARY [nodes: %d, conns: %d]\n", len(s.Nodes), conns)
 	if s.Test.NodesReady {
 		ret += f("(nodes ready) ")
@@ -166,7 +172,9 @@ func (s *Summary) parseLog(nodeIdx int, isErr bool, text string) {
 
 	// parse lines
 	if strings.Contains(text, `machine_onboarded_successfully`) {
+		s.mx.Lock()
 		s.Nodes[s.NodeIDs[nodeIdx]].Onboarded = true
+		s.mx.Unlock()
 	}
 }
 
@@ -265,14 +273,6 @@ func (s *TestSuite) startNode(index int) {
 		s.T().Logf("node %d was previously stopped, creating new shutdown channel", index)
 		node.shutdownCh = make(chan struct{})
 		node.stopped = false
-
-		// previous config
-		path := filepath.Join(node.config.General.UserDir, "dms_config.json")
-		jsonData, err := os.ReadFile(path)
-		s.Require().NoError(err)
-		err = json.Unmarshal(jsonData, &node.config)
-		s.Require().NoError(err)
-		s.T().Logf("previous config: %+v", node.config)
 	}
 
 	// save config to a file
@@ -306,7 +306,7 @@ func (s *TestSuite) startNode(index int) {
 		"ELASTIC_APM_SERVICE_NODE_NAME="+tracePrefix+"E2E-"+s.T().Name()+"-node-"+idxS,
 		"DMS_PASSPHRASE="+node.password,
 		// log levels
-		"GOLOG_LOG_LEVEL=debug",
+		"GOLOG_LOG_LEVEL=debug,observability=error,pubsub=error,net/identify=error,p2p-config=error,basichost=error,observedaddrs=error,swarm2=error",
 		"DMS_OBSERVE_LEVEL=debug",
 		"DMS_FLIGHTREC_SEC="+envFlightrec,
 		"DMS_BINARY_PATH="+binaryPath,
@@ -384,6 +384,8 @@ func (s *TestSuite) startNode(index int) {
 	err = cmd.Wait()
 	s.T().Logf("node %d exited with error: %v", index, err)
 	if err != nil && !strings.Contains(err.Error(), "signal: killed") {
+		s.summary.mx.Lock()
+		defer s.summary.mx.Unlock()
 		if _, ok := s.summary.Nodes[node.peerID]; ok {
 			s.summary.Nodes[node.peerID].Error = true
 			s.printSummary()
@@ -670,9 +672,11 @@ func (s *TestSuite) setupTestNetwork() {
 		node.peerID = networkStats.ID
 		s.T().Logf("node %d peerID: %s", node.index, node.peerID)
 
+		summ.mx.Lock()
 		summ.Nodes[node.peerID] = &SummaryNode{}
 		summ.NodeIDs = append(summ.NodeIDs, node.peerID)
 		summ.NodeDIDs = append(summ.NodeDIDs, []string{node.userDID, node.dmsDID})
+		summ.mx.Unlock()
 
 		// We add all the nodes except the last one to the bootstrap peers to ensure that the network is connected.
 		if i != s.numNodes-1 {
@@ -912,7 +916,7 @@ func (s *TestSuite) RevokeTokenTests() {
 // If we use the package level functions, the test case will be marked as PASS but the tests will ultimately FAIL since the suite can't track it.
 func (s *TestSuite) Test_RunSuite() {
 	gin.SetMode(gin.DebugMode)
-	os.Setenv("GOLOG_LOG_LEVEL", "debug")
+	os.Setenv("GOLOG_LOG_LEVEL", "debug,observability=error,pubsub=error,net/identify=error,p2p-config=error,basichost=error,observedaddrs=error,swarm2=error")
 	// os.Setenv("DMS_OBSERVE_LEVEL", "debug")
 	s.summary = &Summary{
 		Nodes:         make(map[string]*SummaryNode),

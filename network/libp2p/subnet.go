@@ -117,7 +117,7 @@ func newSubnet(ctx context.Context, l *Libp2p, factory NetInterfaceFactory) *sub
 	}
 }
 
-func (l *Libp2p) CreateSubnet(ctx context.Context, subnetID string, cidr string, routingTable map[string]string) error {
+func (l *Libp2p) CreateSubnet(subnetID string, cidr string, routingTable map[string]string) error {
 	l.subnetsmx.Lock()
 	defer l.subnetsmx.Unlock()
 
@@ -125,7 +125,7 @@ func (l *Libp2p) CreateSubnet(ctx context.Context, subnetID string, cidr string,
 		return fmt.Errorf("subnet with ID %s already exists", subnetID)
 	}
 
-	s := newSubnet(ctx, l, l.NetIfaceFactory)
+	s := newSubnet(l.ctx, l, l.NetIfaceFactory)
 	s.info.id = subnetID
 
 	_, CIDR, err := net.ParseCIDR(cidr)
@@ -768,29 +768,8 @@ func (s *subnet) proxyPacket(
 	packet []byte,
 	plen int,
 ) error {
-	s.proxiedConns.mx.Lock()
-	conn, ok := s.proxiedConns.conns[destIP]
-	if !ok {
-		log.Debugf("no connection for %s, establishing one", destIP)
-		// No connection: establish one synchronously
-		newConn, quicConn, err := s.dialIPProxy(ctx, dst, srcIP)
-		if err != nil {
-			s.proxiedConns.mx.Unlock()
-			return fmt.Errorf("failed to establish connection to %s: %w", destIP, err)
-		}
-
-		if old, ok := s.proxiedConns.conns[destIP]; ok {
-			if old != newConn { // Only close if it's a different connection
-				log.Debugf("closing old connection for %s", destIP)
-				old.Close()
-			}
-		}
-		s.proxiedConns.conns[destIP] = newConn
-		s.proxiedConns.mx.Unlock()
-		conn = newConn
-
-		// Start a goroutine to read from the new connection and write to the TUN device
-		go func(ipconn *connectip.Conn, destIP, srcIP string, quicConn *quic.Conn) {
+	startReadLoop := func(ipconn *connectip.Conn, destIP, srcIP string, quicConn *quic.Conn) {
+		go func() {
 			for {
 				select {
 				case <-ctx.Done():
@@ -824,7 +803,42 @@ func (s *subnet) proxyPacket(
 					}
 				}
 			}
-		}(newConn, destIP, srcIP, quicConn)
+		}()
+	}
+
+	isClosedConnErr := func(err error) bool {
+		if err == nil {
+			return false
+		}
+		if errors.Is(err, net.ErrClosed) {
+			return true
+		}
+		msg := strings.ToLower(err.Error())
+		return strings.Contains(msg, "closed")
+	}
+
+	s.proxiedConns.mx.Lock()
+	conn, ok := s.proxiedConns.conns[destIP]
+	if !ok {
+		log.Debugf("no connection for %s, establishing one", destIP)
+		// no connection: establish one synchronously
+		newConn, quicConn, err := s.dialIPProxy(ctx, dst, srcIP)
+		if err != nil {
+			s.proxiedConns.mx.Unlock()
+			return fmt.Errorf("failed to establish connection to %s: %w", destIP, err)
+		}
+
+		if old, ok := s.proxiedConns.conns[destIP]; ok {
+			if old != newConn { // Only close if it's a different connection
+				log.Debugf("closing old connection for %s", destIP)
+				old.Close()
+			}
+		}
+		s.proxiedConns.conns[destIP] = newConn
+		s.proxiedConns.mx.Unlock()
+		conn = newConn
+
+		startReadLoop(newConn, destIP, srcIP, quicConn)
 	} else {
 		log.Debugf("found connection for %s, writing packet", destIP)
 		s.proxiedConns.mx.Unlock()
@@ -833,8 +847,44 @@ func (s *subnet) proxyPacket(
 	icmp, err := conn.WritePacket(packet[:plen])
 	if err != nil {
 		log.Errorf("failed to write packet to connection: %s (subnet=%s, dst=%s)", err, s.info.id, dst.String())
+		closedConnErr := isClosedConnErr(err)
 		s.cleanupConn(destIP, conn)
-		return fmt.Errorf("failed to write packet to connection: %w", err)
+		if !closedConnErr {
+			return fmt.Errorf("failed to write packet to connection: %w", err)
+		}
+
+		// retry once if connection closed
+		log.Warnf("detected closed proxied connection for %s, redialing and retrying write", destIP)
+		newConn, quicConn, dialErr := s.dialIPProxy(ctx, dst, srcIP)
+		if dialErr != nil {
+			return fmt.Errorf("failed to re-establish connection to %s after closed connection: %w", destIP, dialErr)
+		}
+
+		retryConn := newConn
+		startRetryReadLoop := true
+		s.proxiedConns.mx.Lock()
+		if current, ok := s.proxiedConns.conns[destIP]; ok && current != conn {
+			// check in case of a race
+			retryConn = current
+			startRetryReadLoop = false
+			newConn.Close()
+		} else {
+			if old, ok := s.proxiedConns.conns[destIP]; ok && old != newConn {
+				old.Close()
+			}
+			s.proxiedConns.conns[destIP] = newConn
+		}
+		s.proxiedConns.mx.Unlock()
+		if startRetryReadLoop {
+			startReadLoop(newConn, destIP, srcIP, quicConn)
+		}
+
+		icmp, err = retryConn.WritePacket(packet[:plen])
+		if err != nil {
+			log.Errorf("failed to write packet after retry: %s (subnet=%s, dst=%s)", err, s.info.id, dst.String())
+			s.cleanupConn(destIP, retryConn)
+			return fmt.Errorf("failed to write packet to connection after retry: %w", err)
+		}
 	}
 	if len(icmp) > 0 {
 		_, err := iface.Write(icmp)

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"gitlab.com/nunet/device-management-service/actor"
@@ -258,4 +259,45 @@ func (o *BasicOrchestrator) handleAllocationStatusUpdate(msg actor.Envelope) {
 	a.Status = jtypes.AllocationStatus(update.NewStatus)
 	manifest.Allocations[manifestKey] = a
 	o.updateManifest(manifest)
+}
+
+// handleDeploymentState allows CPs to check in with the orchestrator about a deployment
+func (o *BasicOrchestrator) handleDeploymentState(msg actor.Envelope) {
+	defer msg.Discard()
+
+	var req behaviors.DeploymentStateRequest
+
+	handleErr := func(err error) {
+		log.Errorf("error: %s", err)
+		o.sendReply(msg, behaviors.DeploymentStateResponse{Error: err.Error()})
+	}
+
+	if err := json.Unmarshal(msg.Message, &req); err != nil {
+		log.Debugw("unmarshalling_deployment_state_request_failed",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err)
+		handleErr(err)
+		return
+	}
+
+	// might be better to not reply at all on failure
+	if req.EnsembleID != o.id {
+		handleErr(fmt.Errorf(
+			"requested ensemble ID %s does not match orchestrator ID %s",
+			req.EnsembleID, o.id,
+		))
+		return
+	}
+
+	for _, nodeManifest := range o.Manifest().Nodes {
+		// if sender is host for a node, check allcations
+		log.Infof("REQ Alloc IDS: %+v", req.AllocationNamess)
+		log.Infof("NODEMAN Allocs: %+v", nodeManifest.Allocations)
+		if nodeManifest.Handle.Equal(msg.From) && slices.Equal(req.AllocationNamess, nodeManifest.Allocations) {
+			o.sendReply(msg, behaviors.DeploymentStateResponse{OK: true})
+			return
+		}
+	}
+
+	handleErr(fmt.Errorf("no matching node found for sender or allocation IDs"))
 }

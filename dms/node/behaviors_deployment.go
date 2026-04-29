@@ -70,21 +70,30 @@ func (n *Node) handleVerifyEdgeConstraint(msg actor.Envelope) {
 
 func (n *Node) commitDeployment(
 	ensembleID, allocationID string,
-	resources types.CommittedResources, ports map[int]int,
+	resources types.CommittedResources, ports map[int]int, dynamicPortsNum int,
+	bidRequired bool,
 ) error {
-	bid, ok := n.getBid(ensembleID)
-	if !ok {
-		return fmt.Errorf("no bid requests for ensemble id: %s", ensembleID)
+	// commit shouldn't depend on bid. It's stricting the deployment method.
+	// for the behavior, putting it under a unique namespace and adding it as a behavior
+	// specifically when needed and granting the bid requestor (orch) for that specific
+	// namespace is even more secure.
+	// For now, the bidRequired param is a hacky workaround.
+
+	if bidRequired {
+		bid, ok := n.getBid(ensembleID)
+		if !ok {
+			return fmt.Errorf("no bid requests for ensemble id: %s", ensembleID)
+		}
+
+		n.lock.Lock()
+		defer n.lock.Unlock()
+
+		if bid.expire.Before(time.Now()) {
+			return fmt.Errorf("bid request for ensemble id: %s has expired", ensembleID)
+		}
 	}
 
-	n.lock.Lock()
-	defer n.lock.Unlock()
-
-	if bid.expire.Before(time.Now()) {
-		return fmt.Errorf("bid request for ensemble id: %s has expired", ensembleID)
-	}
-
-	if err := n.allocator.Commit(context.Background(), allocationID, resources, ports, bid.request.V1.PublicPorts.Dynamic, bid.expire.Unix()); err != nil {
+	if err := n.allocator.Commit(context.Background(), allocationID, resources, ports, dynamicPortsNum, DefaultCommitTimeout); err != nil {
 		return fmt.Errorf("commit resources for ensemble allocID: %s: %w", allocationID, err)
 	}
 
@@ -112,7 +121,14 @@ func (n *Node) handleCommitDeployment(msg actor.Envelope) {
 		"ensembleID", request.EnsembleID)
 
 	resp := orchestrator.CommitDeploymentResponse{}
-	err := n.commitDeployment(request.EnsembleID, request.AllocationName, request.Resources, request.PortMapping)
+	err := n.commitDeployment(
+		request.EnsembleID,
+		request.AllocationName,
+		request.Resources,
+		request.PortMapping,
+		request.NumDynamicPorts,
+		true,
+	)
 	if err != nil {
 		handleErr(err)
 		return

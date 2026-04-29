@@ -224,6 +224,39 @@ func ExtractNetFromAddr(instance *Instance, addrs []string) (instanceIP, instanc
 
 	instanceIP = netInfo.IPAddress
 
+	isPrivate := func(ip net.IP) bool {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+	}
+
+	isBadIface := func(name string) bool {
+		return strings.Contains(name, "docker") || strings.Contains(name, "incus") || strings.Contains(name, "br-") || strings.HasPrefix(name, "veth")
+	}
+
+	getIfaceName := func(ip net.IP) (string, error) {
+		ifaces, err := net.Interfaces()
+		if err != nil {
+			return "", err
+		}
+		for _, iface := range ifaces {
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, addr := range addrs {
+				if ipNet, ok := addr.(*net.IPNet); ok && ipNet.IP.Equal(ip) {
+					return iface.Name, nil
+				}
+			}
+		}
+		return "", fmt.Errorf("interface not found")
+	}
+
+	type candidate struct {
+		ip   string
+		port string
+	}
+
+	var candAddr candidate
 	for _, addr := range addrs {
 		// strip quic-v1 or quic if present at the end for ToNetAddr
 		addr = strings.TrimRight(addr, "/quic")
@@ -245,9 +278,30 @@ func ExtractNetFromAddr(instance *Instance, addrs []string) (instanceIP, instanc
 				continue
 			}
 
-			hostIP = udpAddr.IP.String()
-			hostPort = strconv.Itoa(udpAddr.Port)
+			if !isPrivate(udpAddr.IP) {
+				return instanceIP, instancePort, udpAddr.IP.String(), strconv.Itoa(udpAddr.Port), nil
+			}
+
+			ifaceName, err := getIfaceName(udpAddr.IP)
+			if err != nil {
+				return "", "", "", "", fmt.Errorf("failed to get interface name: %w", err)
+			}
+
+			if isBadIface(ifaceName) {
+				continue
+			}
+
+			candAddr = candidate{
+				ip:   udpAddr.IP.String(),
+				port: strconv.Itoa(udpAddr.Port),
+			}
 		}
 	}
+	if candAddr.ip == "" || candAddr.port == "" {
+		return "", "", "", "", fmt.Errorf("no valid multiaddr found")
+	}
+
+	hostIP = candAddr.ip
+	hostPort = candAddr.port
 	return instanceIP, instancePort, hostIP, hostPort, nil
 }

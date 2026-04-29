@@ -284,11 +284,12 @@ func (c *Committer) commit(
 }
 
 type CommitDeploymentRequest struct {
-	EnsembleID     string
-	AllocationName string
-	NodeID         string
-	Resources      types.CommittedResources
-	PortMapping    map[int]int
+	EnsembleID      string
+	AllocationName  string
+	NodeID          string
+	Resources       types.CommittedResources
+	PortMapping     map[int]int
+	NumDynamicPorts int
 }
 
 type CommitDeploymentResponse struct {
@@ -326,6 +327,16 @@ func (c *Committer) commitDeployment(cfg jtypes.EnsembleConfig, n string, h acto
 		return ports
 	}
 
+	getDynamicPortsNum := func(allocName string) int {
+		count := 0
+		for _, pc := range ncfg.Ports {
+			if pc.Allocation == allocName && pc.Public == 0 {
+				count++
+			}
+		}
+		return count
+	}
+
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(ncfg.Allocations))
 	aggregatedTimeout := time.Duration(len(ncfg.Allocations)) * CommitDeploymentTimeout
@@ -353,11 +364,12 @@ func (c *Committer) commitDeployment(cfg jtypes.EnsembleConfig, n string, h acto
 				h,
 				behaviors.CommitDeploymentBehavior,
 				CommitDeploymentRequest{
-					EnsembleID:     c.eid,
-					AllocationName: fullAllocID,
-					NodeID:         n,
-					Resources:      types.CommittedResources{Resources: allocation.Resources, AllocationID: fullAllocID},
-					PortMapping:    allocPorts,
+					EnsembleID:      c.eid,
+					AllocationName:  fullAllocID,
+					NodeID:          n,
+					Resources:       types.CommittedResources{Resources: allocation.Resources, AllocationID: fullAllocID},
+					PortMapping:     allocPorts,
+					NumDynamicPorts: getDynamicPortsNum(allocName),
 				},
 				actor.WithMessageTimeout(aggregatedTimeout),
 			)

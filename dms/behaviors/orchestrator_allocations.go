@@ -156,3 +156,19 @@ type AllocationRestartResponse struct {
 	OK    bool
 	Error string
 }
+
+// DeploymentStateRequest requested by CPs to query the orchestrator about the state of a deployment
+type DeploymentStateRequest struct {
+	EnsembleID       string
+	AllocationNamess []string
+}
+
+// DeploymentStateResponse is a reply by the orchestrator in response to CP request with
+// Orchestrator replies OK=true if the CP and its allocations are still considered active for
+// the deployment
+//
+// TODO: better to have well defined states in the future such as ACTIVE, STANDBY, REVERTED etc...
+type DeploymentStateResponse struct {
+	OK    bool
+	Error string
+}

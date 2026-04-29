@@ -59,8 +59,8 @@ func TestAllocation_handleAllocationStart(t *testing.T) {
 
 		// checks allocation state
 		require.Equal(t, AllocationRunning, alloc.status)
-		require.Equal(t, req.SubnetIP, alloc.state.subnetIP)
-		require.Equal(t, req.GatewayIP, alloc.state.gatewayIP)
+		require.Equal(t, req.SubnetIP, alloc.NetState.SubnetIP)
+		require.Equal(t, req.GatewayIP, alloc.NetState.GatewayIP)
 		require.Equal(t, req.PortMapping, alloc.GetPortMapping())
 
 		noopActor, ok := alloc.Actor.(*actor.NoopActor)
@@ -139,7 +139,7 @@ func TestAllocation_handleAllocationRestart(t *testing.T) {
 		require.NotNil(t, alloc)
 
 		alloc.lock.Lock()
-		alloc.state.subnetIP = "192.168.1.1"
+		alloc.NetState.SubnetIP = "192.168.1.1"
 		alloc.lock.Unlock()
 
 		err = alloc.Run(context.Background(), "192.168.1.100", "192.168.1.1", map[int]int{8080: 9090})
@@ -170,7 +170,7 @@ func TestAllocation_handleAllocationRestart(t *testing.T) {
 		require.Equal(t, AllocationPending, alloc.status)
 
 		alloc.lock.Lock()
-		alloc.state.subnetIP = "192.168.1.1" // cannot restart if empty
+		alloc.NetState.SubnetIP = "192.168.1.1" // cannot restart if empty
 		alloc.lock.Unlock()
 
 		envelope := createTestEnvelope(t, []byte{})

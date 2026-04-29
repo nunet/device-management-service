@@ -32,6 +32,8 @@ import (
 
 	"gitlab.com/nunet/device-management-service/api"
 	clover_db "gitlab.com/nunet/device-management-service/db/clover"
+	"gitlab.com/nunet/device-management-service/db/repositories"
+	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/node"
 	"gitlab.com/nunet/device-management-service/dms/node/geolocation"
 	"gitlab.com/nunet/device-management-service/dms/onboarding"
@@ -76,6 +78,7 @@ type dmsStores struct {
 	txStore                  *transaction.Store
 	paymentQuoteStore        *payment_quote.Store
 	provisionedResourceStore *gatewastore.Store
+	persistedAllocsRepo      repositories.GenericRepository[jobtypes.AllocationsStatePersist]
 }
 
 type nodeParams struct {
@@ -318,6 +321,9 @@ func initStores(db *clover.DB) (*dmsStores, error) {
 		return nil, fmt.Errorf("failed to prepare gateway store: %w", err)
 	}
 
+	// persisted allocations db repo
+	allocsPersisted := clover_db.NewGenericRepository[jobtypes.AllocationsStatePersist](db)
+
 	stores := &dmsStores{
 		contractStore:            contractStore,
 		paymentsStore:            paymentsStore,
@@ -325,6 +331,7 @@ func initStores(db *clover.DB) (*dmsStores, error) {
 		txStore:                  txStore,
 		paymentQuoteStore:        paymentQuoteStore,
 		provisionedResourceStore: provisionedResourceStore,
+		persistedAllocsRepo:      allocsPersisted,
 	}
 
 	return stores, nil
@@ -458,6 +465,7 @@ func initNode(params *nodeParams) (*node.Node, error) {
 		params.providerRegistry,
 		params.stores.provisionedResourceStore,
 		params.stores.paymentQuoteStore,
+		params.stores.persistedAllocsRepo,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %s", err)
@@ -636,6 +644,7 @@ func NewDMSDB(path string) (*clover.DB, error) {
 			"service_provider_transactions",
 			"contracts_usage",
 			"usage_metadata",
+			"allocations_state_persist",
 			"payment_quotes",
 		},
 	)

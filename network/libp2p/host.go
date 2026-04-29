@@ -11,6 +11,7 @@ package libp2p
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -42,6 +43,7 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 	mafilt "github.com/whyrusleeping/multiaddr-filter"
 
+	logging "github.com/ipfs/go-log/v2"
 	libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	"gitlab.com/nunet/device-management-service/observability"
 	"gitlab.com/nunet/device-management-service/types"
@@ -246,6 +248,8 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 	optsPS := []pubsub.Option{
 		pubsub.WithFloodPublish(true),
 		pubsub.WithMessageSigning(true),
+		pubsub.WithLogger(newPubsubLogger(host.ID().String())),
+		pubsub.WithRPCLogger(newPubsubRPCLogger(host.ID().String())),
 		pubsub.WithPeerScore(
 			&pubsub.PeerScoreParams{
 				SkipAtomicValidation: true,
@@ -278,6 +282,20 @@ func NewHost(ctx context.Context, config *types.Libp2pConfig, appScore func(p pe
 		return nil, nil, nil, nil, nil, err
 	}
 	return host, idht, gossip, udpConn, rqtr, nil
+}
+
+func newPubsubLogger(peerID string) *slog.Logger {
+	return slog.New(logging.SlogHandler().WithAttrs([]slog.Attr{
+		slog.String("logger", "pubsub"),
+		slog.String("id", peerID),
+	}))
+}
+
+func newPubsubRPCLogger(peerID string) *slog.Logger {
+	return slog.New(logging.SlogHandler().WithAttrs([]slog.Attr{
+		slog.String("logger", "pubsub/rpc"),
+		slog.String("id", peerID),
+	}))
 }
 
 func watchForNewPeers(ctx context.Context, host host.Host, newPeer chan peer.AddrInfo) {

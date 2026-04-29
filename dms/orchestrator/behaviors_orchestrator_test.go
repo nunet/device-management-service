@@ -10,6 +10,7 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -114,7 +115,7 @@ func TestOrchestratorHandlesStatusUpdate(t *testing.T) {
 	msg1, err := actor.Message(
 		allocActor.Handle(), // FROM: allocation actor
 		orch.actor.Handle(), // TO: orchestrator actor
-		behaviors.NotifyAllocationStatusBehavior,
+		fmt.Sprintf(behaviors.NotifyAllocationStatusBehavior, ensembleID),
 		statusUpdate1,
 		actor.WithMessageExpiry(uint64(time.Now().Add(1*time.Minute).UnixNano())),
 	)
@@ -149,7 +150,7 @@ func TestOrchestratorHandlesStatusUpdate(t *testing.T) {
 	msg2, err := actor.Message(
 		allocActor.Handle(),
 		orch.actor.Handle(),
-		behaviors.NotifyAllocationStatusBehavior,
+		fmt.Sprintf(behaviors.NotifyAllocationStatusBehavior, ensembleID),
 		statusUpdate2,
 		actor.WithMessageExpiry(uint64(time.Now().Add(1*time.Minute).UnixNano())),
 	)
@@ -181,7 +182,7 @@ func TestOrchestratorHandlesStatusUpdate(t *testing.T) {
 	msg3, err := actor.Message(
 		allocActor.Handle(),
 		orch.actor.Handle(),
-		behaviors.NotifyAllocationStatusBehavior,
+		fmt.Sprintf(behaviors.NotifyAllocationStatusBehavior, ensembleID),
 		statusUpdate3,
 		actor.WithMessageExpiry(uint64(time.Now().Add(1*time.Minute).UnixNano())),
 	)

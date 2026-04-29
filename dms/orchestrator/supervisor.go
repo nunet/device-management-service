@@ -33,10 +33,11 @@ var (
 
 // Supervisor encapsulates supervision logic.
 type Supervisor struct {
-	id       string
-	ctx      context.Context
-	actor    actor.Actor
-	manifest jtypes.EnsembleManifest
+	id                     string
+	ctx                    context.Context
+	actor                  actor.Actor
+	manifest               jtypes.EnsembleManifest
+	updateAllocationStatus func(allocationID string, status jtypes.AllocationStatus)
 
 	registeredHealthChecks map[string]struct{} // allocationID -> struct{}
 	failures               map[string]int      // allocationID -> failureCount
@@ -58,6 +59,23 @@ func NewSupervisor(ctx context.Context, actor actor.Actor, id string) *Superviso
 			Allocations: make(map[string]jtypes.AllocationManifest),
 			Nodes:       make(map[string]jtypes.NodeManifest),
 		},
+	}
+}
+
+// SetAllocationStatusUpdater sets a callback to update allocation status
+func (s *Supervisor) SetAllocationStatusUpdater(fn func(allocationID string, status jtypes.AllocationStatus)) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.updateAllocationStatus = fn
+}
+
+func (s *Supervisor) notifyAllocationStatus(allocationID string, status jtypes.AllocationStatus) {
+	s.lock.Lock()
+	updater := s.updateAllocationStatus
+	s.lock.Unlock()
+	if updater != nil {
+		log.Debugf("updating alloc (%s) status to %s", allocationID, status)
+		updater(allocationID, status)
 	}
 }
 
@@ -234,6 +252,7 @@ func (s *Supervisor) performHealthCheck(allocation jtypes.AllocationManifest) er
 
 		if !resp.OK {
 			log.Errorf("error in healthcheck for allocation %s: %s", allocation.ID, resp.Error)
+			s.notifyAllocationStatus(allocation.ID, jtypes.AllocationFailed)
 
 			s.lock.Lock()
 			s.failures[allocation.ID]++
@@ -252,6 +271,7 @@ func (s *Supervisor) performHealthCheck(allocation jtypes.AllocationManifest) er
 			}
 		} else {
 			log.Infof("successfully healthchecked allocation %s", allocation.ID)
+			s.notifyAllocationStatus(allocation.ID, jtypes.AllocationRunning)
 			s.lock.Lock()
 			delete(s.failures, allocation.ID)
 			s.lock.Unlock()
@@ -262,6 +282,7 @@ func (s *Supervisor) performHealthCheck(allocation jtypes.AllocationManifest) er
 		}
 
 		log.Warnf("timeout waiting for supervisor reply for allocation %s", allocation.ID)
+		s.notifyAllocationStatus(allocation.ID, jtypes.AllocationFailed)
 		s.lock.Lock()
 		s.failures[allocation.ID]++
 		v := s.failures[allocation.ID]

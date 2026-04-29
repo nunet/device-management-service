@@ -24,6 +24,7 @@ import (
 	lcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/afero"
+	"gitlab.com/nunet/device-management-service/db/repositories"
 	gatewastore "gitlab.com/nunet/device-management-service/gateway/store"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -109,6 +110,36 @@ type executorMetadata struct {
 	executionType jobs.AllocationExecutor
 }
 
+type nodeState int32
+
+const (
+	nodeStateInit nodeState = iota
+	nodeStateStarting
+	nodeSateStartFailed
+	nodeStateRunning
+	nodeStateStopping
+	nodeStateStopped
+)
+
+func (s nodeState) String() string {
+	switch s {
+	case nodeStateInit:
+		return "init"
+	case nodeStateStarting:
+		return "starting"
+	case nodeSateStartFailed:
+		return "start_failed"
+	case nodeStateRunning:
+		return "running"
+	case nodeStateStopping:
+		return "stopping"
+	case nodeStateStopped:
+		return "stopped"
+	default:
+		return fmt.Sprintf("unknown(%d)", s)
+	}
+}
+
 type PortConfig struct {
 	AvailableRangeFrom int
 	AvailableRangeTo   int
@@ -137,7 +168,10 @@ type Node struct {
 	peers        map[peer.ID]*peerState
 	bids         map[string]*bidState
 	answeredBids map[string][]uint64
+	// TODO: see about replacing running with state
 	running      atomic.Bool
+	state        atomic.Int32
+	readyForBids atomic.Bool
 
 	// volume controller
 	volumeController controller.GlusterControllerInterface
@@ -168,6 +202,8 @@ type Node struct {
 	paymentProcessor PaymentProcessor
 	gatewayStore     *gatewastore.Store
 
+	// allocations persisted repo
+	allocsPersistRepo repositories.GenericRepository[jobtypes.AllocationsStatePersist]
 	// payment quote store and price converter
 	paymentQuoteStore *payment_quote.Store
 	priceConverter    *pricing.PriceConverter
@@ -197,6 +233,14 @@ func createActor(
 	return newActor, nil
 }
 
+func (n *Node) setState(state nodeState) {
+	n.state.Store(int32(state))
+}
+
+func (n *Node) getState() nodeState {
+	return nodeState(n.state.Load())
+}
+
 // New creates a new node, attaches an actor to the node.
 func New(cfg config.Config, fs afero.Afero,
 	onboarding *onboarding.Onboarding,
@@ -216,6 +260,7 @@ func New(cfg config.Config, fs afero.Afero,
 	providerRegistry *provider.Registry,
 	gatewayStore *gatewastore.Store,
 	paymentQuoteStore *payment_quote.Store,
+	allocsPersistRepo repositories.GenericRepository[jobtypes.AllocationsStatePersist],
 ) (*Node, error) {
 	if onboarding == nil {
 		return nil, errors.New("onboarding is nil")
@@ -315,7 +360,9 @@ func New(cfg config.Config, fs afero.Afero,
 		contractActors:         make(map[string]*tokenomics.ContractActor),
 		serverProviderRegistry: providerRegistry,
 		gatewayStore:           gatewayStore,
+		allocsPersistRepo:      allocsPersistRepo,
 	}
+	n.setState(nodeStateInit)
 
 	// Create payment processor with invokeBehaviour function
 	invokeBehaviourFunc := func(destination actor.Handle, behavior string, req interface{}, timeout time.Duration) (actor.Envelope, error) {
@@ -463,7 +510,7 @@ func (n *Node) restoreDeployments() error {
 		}
 
 		// Check if deployment is still valid (not based on time)
-		if !isDeploymentStillValid(d) {
+		if !isOrchestratorStillValid(d) {
 			log.Warnf("deployment %s is no longer valid; skipping", d.OrchestratorID)
 			continue
 		}
@@ -763,6 +810,9 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 	return dmsBehaviors
 }
 
+// addOrchestratorBehaviors adds orchestrator-specific behaviors to the node's actor.
+// These behaviors allow an orchestrator to join a deployment subnet. Subnet management
+// is handled by the node.
 func (n *Node) addOrchestratorBehaviors(actr actor.Actor, ensembleID string) error {
 	orchBehaviors := map[string]struct {
 		fn   func(actor.Envelope)
@@ -964,6 +1014,13 @@ func (n *Node) geolocate() {
 func (n *Node) Start() error {
 	log.Infow("node_start_initiated",
 		"labels", string(observability.LabelNode))
+	n.setState(nodeStateStarting)
+	started := false
+	defer func() {
+		if !started {
+			n.setState(nodeSateStartFailed)
+		}
+	}()
 
 	if err := n.allocator.Run(); err != nil {
 		return fmt.Errorf("start node allocator: %w", err)
@@ -1005,8 +1062,14 @@ func (n *Node) Start() error {
 		go n.shutdownUnusedProvisionedResources()
 	}
 
+	// check if persisted allocs are restorable
+	// not accepting bids until persisted allocs are evaluated
+	n.evalPersistedAllocs()
+
 	log.Infow("node_started_successfully",
 		"labels", string(observability.LabelNode))
+	n.setState(nodeStateRunning)
+	started = true
 	return nil
 }
 
@@ -1014,6 +1077,7 @@ func (n *Node) Start() error {
 func (n *Node) Stop() error {
 	log.Infow("node_stop_initiated",
 		"labels", string(observability.LabelNode))
+	n.setState(nodeStateStopping)
 
 	// Stop billing scheduler first (before stopping other components)
 	if n.billingScheduler != nil {
@@ -1038,10 +1102,12 @@ func (n *Node) Stop() error {
 
 	// stop the actor
 	if err := n.actor.Stop(); err != nil {
+		n.setState(nodeStateStopped)
 		return fmt.Errorf("stop node actor: %w", err)
 	}
 
 	n.running.Store(false)
+	n.setState(nodeStateStopped)
 
 	log.Infow("node_stopped_successfully",
 		"labels", string(observability.LabelNode))
@@ -1179,7 +1245,6 @@ func (n *Node) createOrchestrator(
 	return orch, nil
 }
 
-// TODO: make send reply a helper func from actor pkg
 func (n *Node) sendReply(msg actor.Envelope, payload interface{}) {
 	var opt []actor.MessageOption
 	if msg.IsBroadcast() {
@@ -1651,6 +1716,63 @@ func (n *Node) handleContractEvents(event eventhandler.Event) error {
 	return nil
 }
 
+// allocStatusUpdate is a callback called by allocations for status updates
+func (n *Node) allocStatusUpdate(allocID string, status jobtypes.AllocationStatus) {
+	log.Infof("allocStatusUpdate: %s", status.String())
+
+	switch status {
+	case jobtypes.AllocationRunning:
+		alloc, err := n.allocator.GetAllocation(allocID)
+		if err != nil {
+			log.Errorf("unable to find allocation %s for status update(%s): %v", allocID, status.String(), err)
+			return
+		}
+		err = n.saveAllocationsState(alloc.PersistState())
+		if err != nil {
+			log.Errorf("unable to save allocations state for alloc %s: %v", allocID, err)
+		}
+	case jobtypes.AllocationStopped, jobtypes.AllocationFailed, jobtypes.AllocationCompleted, jobs.AllocationTerminated:
+		state := n.getState()
+		if state != nodeStateRunning {
+			log.Infof("allocStatusUpdate: skip persisted allocation state deletion for %s while node state=%s", allocID, state.String())
+			return
+		}
+		err := n.deletePersistedAllocationState(allocID)
+		if err != nil {
+			log.Errorf("unable to delete persisted allocation state for alloc %s: %v", allocID, err)
+		}
+	}
+}
+
+// grantCaps grants capabilities to a subject sub for audience aud with periodic refresh
+// (1h now) and a refresh condition.
+func (n *Node) grantCaps(
+	sub did.DID, aud did.DID, caps []ucan.Capability, refreshCondition func() bool,
+) error {
+	if err := n.actor.Security().Grant(sub, aud, caps, grantAllocationCapsFreq); err != nil {
+		return fmt.Errorf("grant caps: %w", err)
+	}
+
+	// refresh caps grants periodically
+	go func() {
+		ticker := time.NewTicker(grantAllocationCapsFreq)
+		defer ticker.Stop()
+
+		for refreshCondition() {
+			select {
+			case <-n.ctx.Done():
+				return
+			case <-ticker.C:
+				if err := n.actor.Security().Grant(sub, aud, caps, grantAllocationCapsFreq); err != nil {
+					log.Warnf("grant caps: %v", err)
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
 // isRestorableStatus checks if a deployment status is restorable
 // TODO: This will be implemented later with more sophisticated logic
 // For now, all deployments with status <= Running are considered restorable
@@ -1665,10 +1787,11 @@ func isRestorableStatus(status jobtypes.DeploymentStatus) bool {
 	return status <= jobtypes.DeploymentStatusRunning
 }
 
-// isDeploymentStillValid checks if a deployment is still valid for restoration
+// isOrchestratorStillValid checks if an orchestrtor deployment is still valid for
+// restoration
 // TODO: This will be implemented later with comprehensive validation
 // For now, all deployments are considered valid
-func isDeploymentStillValid(_ *jobtypes.OrchestratorView) bool {
+func isOrchestratorStillValid(_ *jobtypes.OrchestratorView) bool {
 	// TODO: Implement comprehensive deployment validation
 	// This should check:
 	// - Deployment configuration is still valid

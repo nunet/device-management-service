@@ -91,6 +91,7 @@ func TestNewAllocation(t *testing.T) {
 				eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
 				nil, // contractStore - nil for tests
 				"",
+				func(_ string, _ jobtypes.AllocationStatus) {},
 			)
 
 			if tt.wantErr {
@@ -116,10 +117,13 @@ func TestAllocation_Run(t *testing.T) {
 
 		// success - run allocation
 		// no volumes
-		err = alloc.Run(context.Background(), "", "", nil)
+		err = alloc.Run(context.Background(), "10.1.0.20", "10.1.0.1", map[int]int{31000: 80})
 		require.NoError(t, err)
 		require.Equal(t, AllocationRunning, alloc.status)
 		require.NotEmpty(t, alloc.resultsDir)
+		require.Equal(t, "10.1.0.20", alloc.NetState.SubnetIP)
+		require.Equal(t, "10.1.0.1", alloc.NetState.GatewayIP)
+		require.Equal(t, map[int]int{31000: 80}, alloc.NetState.PortMapping)
 	})
 
 	t.Run("should not error run already running allocation", func(t *testing.T) {
@@ -395,53 +399,79 @@ func TestAllocation_Start(t *testing.T) {
 func TestAllocation_Restart(t *testing.T) {
 	t.Parallel()
 
-	alloc, err := createTestAllocation(t)
-	require.NoError(t, err)
-	require.Equal(t, AllocationPending, alloc.status)
+	t.Run("restart running allocation", func(t *testing.T) {
+		t.Parallel()
 
-	// state.subnetIP is not updated by any method and assigned at constructor
-	// that's why changing internal state here
-	alloc.state.subnetIP = "192.168.1.12"
+		alloc, err := createTestAllocation(t)
+		require.NoError(t, err)
+		require.Equal(t, AllocationPending, alloc.status)
 
-	// success - restart running allocation
-	err = alloc.Start()
-	require.NoError(t, err)
-	require.True(t, alloc.actorRunning)
+		// state.subnetIP is not updated by any method and assigned at constructor
+		// that's why changing internal state here
+		alloc.NetState.SubnetIP = "192.168.1.10"
 
-	err = alloc.Run(context.Background(), "", "", nil)
-	require.NoError(t, err)
-	require.Equal(t, AllocationRunning, alloc.status)
-	require.True(t, alloc.actorRunning)
+		// success - restart running allocation
+		err = alloc.Start()
+		require.NoError(t, err)
+		require.True(t, alloc.actorRunning)
 
-	err = alloc.Restart(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, AllocationRunning, alloc.status)
-	require.True(t, alloc.actorRunning)
+		err = alloc.Run(context.Background(), alloc.NetState.SubnetIP, "", nil)
+		require.NoError(t, err)
+		require.Equal(t, AllocationRunning, alloc.status)
+		require.True(t, alloc.actorRunning)
 
-	// success - restarting a simulated failed allocation
-	alloc.setStatus(AllocationFailed, "alloc failed", false)
+		err = alloc.Restart(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, AllocationRunning, alloc.status)
+		require.True(t, alloc.actorRunning)
+	})
 
-	err = alloc.Restart(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, AllocationRunning, alloc.status)
-	require.True(t, alloc.actorRunning)
+	t.Run("restart failed allocation", func(t *testing.T) {
+		t.Parallel()
 
-	// error - restart allocation without subnet IP
-	alloc.state.subnetIP = ""
-	err = alloc.Run(context.Background(), "", "", nil)
-	require.NoError(t, err)
-	require.Equal(t, AllocationRunning, alloc.status)
-	require.True(t, alloc.actorRunning)
+		alloc, err := createTestAllocation(t)
+		require.NoError(t, err)
+		require.Equal(t, AllocationPending, alloc.status)
+		alloc.NetState.SubnetIP = "192.168.1.11"
 
-	err = alloc.Stop(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, AllocationStopped, alloc.status)
-	require.False(t, alloc.actorRunning)
+		// success - restarting a simulated failed allocation
+		alloc.setStatus(AllocationFailed, "alloc failed", false)
 
-	err = alloc.Restart(context.Background())
-	require.Error(t, err)
-	require.Equal(t, AllocationStopped, alloc.status) // make sure it remains stopped
-	require.False(t, alloc.actorRunning)
+		err = alloc.Restart(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, AllocationRunning, alloc.status)
+		require.True(t, alloc.actorRunning)
+	})
+
+	t.Run("restart without subnet IP", func(t *testing.T) {
+		t.Parallel()
+
+		alloc, err := createTestAllocation(t)
+		require.NoError(t, err)
+		require.Equal(t, AllocationPending, alloc.status)
+		alloc.NetState.SubnetIP = "192.168.1.12"
+
+		err = alloc.Start()
+		require.NoError(t, err)
+
+		err = alloc.Run(context.Background(), alloc.NetState.SubnetIP, "", nil)
+		require.NoError(t, err)
+		require.Equal(t, AllocationRunning, alloc.status)
+		require.True(t, alloc.actorRunning)
+
+		err = alloc.Stop(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, AllocationStopped, alloc.status)
+		require.False(t, alloc.actorRunning)
+
+		// error - restart allocation without subnet IP
+		alloc.NetState.SubnetIP = ""
+
+		err = alloc.Restart(context.Background())
+		require.Error(t, err)
+		require.Equal(t, AllocationRestarting, alloc.Status().Status) // stays on restarting
+		require.False(t, alloc.actorRunning)                          // stays down
+	})
 }
 
 func TestAllocation_sendReply(t *testing.T) {
@@ -506,6 +536,78 @@ func TestAllocation_sendReply(t *testing.T) {
 	}
 }
 
+func TestAllocation_PersistState(t *testing.T) {
+	t.Parallel()
+
+	t.Run("persist state of alloc with empty priv key", func(t *testing.T) {
+		t.Parallel()
+
+		// noop actor has no priv key
+		alloc, err := createTestAllocation(t)
+		require.NoError(t, err)
+
+		state := alloc.PersistState()
+		require.Empty(t, state.AllocationID)
+		require.Empty(t, state.DeploymentID)
+	})
+
+	t.Run("persist state correct values", func(t *testing.T) {
+		t.Parallel()
+
+		alloc, err := createTestAllocation(t)
+		require.NoError(t, err)
+
+		substrate := network.NewSubstrate()
+		alloc.Actor, _, _, _, _ = actor.NewMockActorForTest(t, actor.Handle{}, substrate)
+
+		committedPorts := map[int]int{31000: 80}
+		alloc.SetCommittedPorts(committedPorts, 2)
+		alloc.NetState.SubnetIP = "10.0.0.10"
+		alloc.NetState.GatewayIP = "10.0.0.1"
+		alloc.NetState.PortMapping = map[int]int{31000: 80}
+		alloc.ApplyPersistedNetworkMetadata(
+			"subnet-1",
+			map[string]string{"10.0.0.10": "peer-a"},
+			map[string]string{"service.local": "10.0.0.10"},
+			[]jobtypes.AllocationPortMapping{
+				{
+					SubnetID:   "subnet-1",
+					Protocol:   "tcp",
+					SourceIP:   "10.0.0.10",
+					SourcePort: "31000",
+					DestIP:     "10.0.0.11",
+					DestPort:   "80",
+				},
+			},
+		)
+
+		state := alloc.PersistState()
+		require.Equal(t, alloc.ID, state.AllocationID)
+		require.Equal(t, alloc.DeploymentID, state.DeploymentID)
+		require.Equal(t, 2, state.DynamicPortsNum)
+		require.Equal(t, "subnet-1", state.SubnetID)
+		require.Equal(t, "10.0.0.10", state.NetState.SubnetIP)
+		require.Equal(t, 80, state.Ports[31000])
+		require.Equal(t, "peer-a", state.RoutingTable["10.0.0.10"])
+		require.Equal(t, "10.0.0.10", state.DNSRecords["service.local"])
+		require.Len(t, state.PortMapping, 1)
+		require.Equal(t, "31000", state.PortMapping[0].SourcePort)
+
+		// Returned maps are copies and should not mutate allocation state.
+		state.Ports[32000] = 8080
+		state.RoutingTable["10.0.0.99"] = "peer-z"
+		state.DNSRecords["other.local"] = "10.0.0.99"
+
+		again := alloc.PersistState()
+		_, hasPort := again.Ports[32000]
+		_, hasRoute := again.RoutingTable["10.0.0.99"]
+		_, hasDNS := again.DNSRecords["other.local"]
+		require.False(t, hasPort)
+		require.False(t, hasRoute)
+		require.False(t, hasDNS)
+	})
+}
+
 func createDetails(v []types.VolumeConfig) AllocationDetails {
 	return AllocationDetails{
 		Job: Job{
@@ -545,6 +647,7 @@ func createTestAllocation(t *testing.T, vol ...types.VolumeConfig) (*Allocation,
 		eventhandler.New(context.Background(), 1, 1, time.Second, time.Second, func(_ eventhandler.Event) error { return nil }),
 		nil, // contractStore - nil for tests
 		"",
+		func(_ string, _ jobtypes.AllocationStatus) {},
 	)
 	if err != nil {
 		return nil, err
