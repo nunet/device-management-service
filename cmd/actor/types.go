@@ -39,6 +39,21 @@ type ContractConfirmLocalTransactionCmd struct {
 	QuoteID    string
 }
 
+type ContractListLocalTransactionsCmd struct {
+	Metadata            map[string]string `json:"metadata,omitempty"`
+	Status              []string          `json:"status,omitempty"`
+	ContractDID         string            `json:"contract_did,omitempty"`
+	PaymentValidatorDID string            `json:"payment_validator_did,omitempty"`
+	UniqueID            string            `json:"unique_id,omitempty"`
+	TxHash              string            `json:"tx_hash,omitempty"`
+	Blockchain          string            `json:"blockchain,omitempty"`
+	FromAddress         string            `json:"from_address,omitempty"`
+	ToAddress           string            `json:"to_address,omitempty"`
+	Limit               int               `json:"limit,omitempty"`
+	Offset              int               `json:"offset,omitempty"`
+	SortBy              string            `json:"sort_by,omitempty"`
+}
+
 type ContractGetPaymentQuoteCmd struct {
 	UniqueID string
 }

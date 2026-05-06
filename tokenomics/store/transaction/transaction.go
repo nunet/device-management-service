@@ -39,6 +39,9 @@ type Transaction struct {
 	OriginalAmount     string `json:"original_amount,omitempty"`     // Amount in pricing currency (USDT)
 	PricingCurrency    string `json:"pricing_currency,omitempty"`    // Currency of original amount (e.g., "USDT")
 	RequiresConversion bool   `json:"requires_conversion,omitempty"` // True if conversion is needed
+
+	// TODO : consider baseDBModel and refactoring "store" implementations (#1260)
+	CreatedAt int64 `json:"created_at,omitempty"`
 }
 
 type Store struct {
@@ -59,6 +62,12 @@ func (s *Store) Upsert(t Transaction) error {
 		t.Status = "unpaid"
 	}
 
+	createdAt := t.CreatedAt
+	if createdAt == 0 {
+		createdAt = time.Now().UnixNano()
+	}
+	t.CreatedAt = createdAt
+
 	bts, err := json.Marshal(t)
 	if err != nil {
 		return fmt.Errorf("failed to marshal transaction: %w", err)
@@ -77,7 +86,7 @@ func (s *Store) Upsert(t Transaction) error {
 	doc := document.NewDocumentOf(t)
 	doc.Set("unique_id", t.UniqueID)
 	doc.Set("contract_did", t.ContractDID)
-	doc.Set("created_at", time.Now().UnixNano())
+	doc.Set("created_at", createdAt)
 	doc.Set("transaction_data", bts)
 
 	return s.db.Insert(transactionsCollection, doc)
@@ -99,6 +108,9 @@ func (s *Store) AllTransactions() ([]*Transaction, error) {
 		err = json.Unmarshal(data.([]byte), &t)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal single transaction: %w", err)
+		}
+		if t.CreatedAt == 0 {
+			t.CreatedAt = doc.Get("created_at").(int64)
 		}
 		allTransactions = append(allTransactions, &t)
 	}
@@ -172,6 +184,9 @@ func (s *Store) GetTransactionByUniqueID(uniqueID string) (*Transaction, error) 
 	var t Transaction
 	if err := json.Unmarshal(data.([]byte), &t); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal transaction: %w", err)
+	}
+	if t.CreatedAt == 0 {
+		t.CreatedAt = doc.Get("created_at").(int64)
 	}
 	return &t, nil
 }

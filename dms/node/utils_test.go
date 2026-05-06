@@ -45,6 +45,7 @@ import (
 	"gitlab.com/nunet/device-management-service/storage"
 	"gitlab.com/nunet/device-management-service/storage/volume/glusterfs/controller"
 	"gitlab.com/nunet/device-management-service/tokenomics/store"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -254,6 +255,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		"contracts",
 		"contracts_keys",
 		"allocations_state_persist",
+		"service_provider_transactions",
 	})
 	require.NoError(t, err)
 
@@ -326,6 +328,9 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 	contractStore, err := store.New(db)
 	require.NoError(t, err)
 
+	transactionStore, err := transaction.New(db)
+	require.NoError(t, err)
+
 	node := &Node{}
 	node.onboarding = onboardingManager
 	node.allocator = allocator
@@ -354,6 +359,7 @@ func newMockNode(t *testing.T, substrate *network.Substrate) (*Node, did.TrustCo
 		executionType: jobtypes.ExecutorDocker,
 	}
 	node.contractStore = contractStore
+	node.transactionStore = transactionStore
 	node.allocsPersistRepo = allocsPersisted
 	allocator.setTailContractGetter(node)
 
@@ -429,6 +435,7 @@ func newMockNodeWithOrchestratorRegistry(t *testing.T, substrate *network.Substr
 		"onboarding_config",
 		"resource_allocation",
 		"deployments", // Use the new deployments collection
+		"service_provider_transactions",
 	})
 	require.NoError(t, err)
 
@@ -443,6 +450,9 @@ func newMockNodeWithOrchestratorRegistry(t *testing.T, substrate *network.Substr
 
 	// Create deployment store for orchestrator registry
 	deploymentStore, err := orchestrator.NewCloverDeploymentStore(db)
+	require.NoError(t, err)
+
+	transactionStore, err := transaction.New(db)
 	require.NoError(t, err)
 
 	mockHardwareManager := hardware.NewMockHardwareManager(
@@ -528,6 +538,8 @@ func newMockNodeWithOrchestratorRegistry(t *testing.T, substrate *network.Substr
 		executor:      &docker.Executor{},
 		executionType: jobtypes.ExecutorDocker,
 	}
+
+	node.transactionStore = transactionStore
 	node.allocsPersistRepo = allocsPersisted
 	allocator.setTailContractGetter(node)
 
