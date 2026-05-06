@@ -17,6 +17,11 @@ import (
 	"gitlab.com/nunet/device-management-service/types"
 )
 
+const (
+	cUSDT = "USDT"
+	cNTX  = "NTX"
+)
+
 // mockOracle is a simple mock implementation of PriceOracle for testing
 type mockOracle struct {
 	price    float64
@@ -36,7 +41,7 @@ func (m *mockOracle) ConvertAmount(_ context.Context, amount string, fromCurrenc
 		return "", m.priceErr
 	}
 	// Simplified conversion for testing
-	if fromCurrency == "USDT" && toCurrency == "NTX" {
+	if fromCurrency == cUSDT && toCurrency == cNTX {
 		return "2000.00", nil // Assuming rate of 0.05
 	}
 	_ = amount
@@ -51,7 +56,7 @@ func TestPriceConverter_ConvertPaymentItem_NoConversion(t *testing.T) {
 		PaymentDetails: contracts.PaymentDetails{
 			PricingCurrency: "", // Empty - no conversion
 			Addresses: []types.PaymentAddressInfo{
-				{Currency: "NTX"},
+				{Currency: cNTX},
 			},
 		},
 	}
@@ -73,9 +78,9 @@ func TestPriceConverter_ConvertPaymentItem_WithConversion(t *testing.T) {
 
 	contract := &contracts.Contract{
 		PaymentDetails: contracts.PaymentDetails{
-			PricingCurrency: "USDT", // Set to USDT - conversion should occur
+			PricingCurrency: cUSDT, // Set to USDT - conversion should occur
 			Addresses: []types.PaymentAddressInfo{
-				{Currency: "NTX"},
+				{Currency: cNTX},
 			},
 		},
 	}
@@ -88,7 +93,7 @@ func TestPriceConverter_ConvertPaymentItem_WithConversion(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, "100.00", item.Amount, "amount should be converted")
 	require.Equal(t, "100.00", item.OriginalAmount, "original amount should be preserved")
-	require.Equal(t, "USDT", item.PricingCurrency, "pricing currency should be set")
+	require.Equal(t, cUSDT, item.PricingCurrency, "pricing currency should be set")
 	require.NotEmpty(t, item.ExchangeRate, "exchange rate should be set")
 	require.False(t, item.ConversionTimestamp.IsZero(), "conversion timestamp should be set")
 	require.Equal(t, "2000.00", item.Amount, "amount should be converted")
@@ -100,9 +105,9 @@ func TestPriceConverter_ConvertPaymentItem_SameCurrency(t *testing.T) {
 
 	contract := &contracts.Contract{
 		PaymentDetails: contracts.PaymentDetails{
-			PricingCurrency: "NTX", // Same as payment currency
+			PricingCurrency: cNTX, // Same as payment currency
 			Addresses: []types.PaymentAddressInfo{
-				{Currency: "NTX"},
+				{Currency: cNTX},
 			},
 		},
 	}
@@ -123,9 +128,9 @@ func TestPriceConverter_ConvertPaymentItem_APIError(t *testing.T) {
 
 	contract := &contracts.Contract{
 		PaymentDetails: contracts.PaymentDetails{
-			PricingCurrency: "USDT",
+			PricingCurrency: cUSDT,
 			Addresses: []types.PaymentAddressInfo{
-				{Currency: "NTX"},
+				{Currency: cNTX},
 			},
 		},
 	}

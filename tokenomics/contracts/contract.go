@@ -135,11 +135,32 @@ type CollectUsagesAndForwardToPaymentProvidersReponse struct {
 	Results     []ContractUsageResult `json:"results,omitempty"` // Per-contract results
 }
 
-type ContractListLocalTransactionsRequest struct{}
+type ContractListLocalTransactionsRequest struct {
+	// generic metadata filter with key=value pairs
+	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// common filters
+	Status              []string `json:"status,omitempty"`
+	ContractDID         string   `json:"contract_did,omitempty"`
+	PaymentValidatorDID string   `json:"payment_validator_did,omitempty"`
+	UniqueID            string   `json:"unique_id,omitempty"`
+	TxHash              string   `json:"tx_hash,omitempty"`
+	Blockchain          string   `json:"blockchain,omitempty"`
+	FromAddress         string   `json:"from_address,omitempty"`
+	ToAddress           string   `json:"to_address,omitempty"`
+
+	// Pagination and sorting.
+	Limit  int    `json:"limit,omitempty"`
+	Offset int    `json:"offset,omitempty"`
+	SortBy string `json:"sort_by,omitempty"` // only "status"/"-status" and "created_at"/"-created_at" are supported
+}
 
 type ContractListLocalTransactionsResponse struct {
 	Error        string                     `json:"error"`
 	Transactions []*transaction.Transaction `json:"transactions"`
+	Total        int                        `json:"total"`
+	HasMore      bool                       `json:"has_more"`
+	NextOffset   int                        `json:"next_offset,omitempty"`
 }
 
 type ContractConfirmLocalTransactionRequest struct {

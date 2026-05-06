@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1176,17 +1177,180 @@ func (n *Node) handleListLocalTransactions(msg actor.Envelope) {
 		n.sendReply(msg, contracts.ContractListLocalTransactionsResponse{Error: err.Error()})
 	}
 
+	var req contracts.ContractListLocalTransactionsRequest
+	if len(msg.Message) > 0 {
+		if err := json.Unmarshal(msg.Message, &req); err != nil {
+			handleErr(fmt.Errorf("failed to unmarshal list local transactions request: %s", err))
+			return
+		}
+	}
+
 	txs, err := n.transactionStore.AllTransactions()
 	if err != nil {
 		handleErr(fmt.Errorf("failed to get local transactions: %s", err))
 		return
 	}
 
+	filteredTxs := filterLocalTransactions(txs, req)
+	sortLocalTransactions(filteredTxs, req.SortBy)
+
+	total := len(filteredTxs)
+	paginatedTxs := paginateLocalTransactions(filteredTxs, req.Offset, req.Limit)
+
 	resp := contracts.ContractListLocalTransactionsResponse{
-		Transactions: txs,
+		Transactions: paginatedTxs,
+		Total:        total,
+	}
+	resp.HasMore = req.Limit > 0 && (req.Offset+len(paginatedTxs) < total)
+	if resp.HasMore {
+		resp.NextOffset = req.Offset + len(paginatedTxs)
 	}
 
 	n.sendReply(msg, resp)
+}
+
+func filterLocalTransactions(
+	txs []*transaction.Transaction,
+	req contracts.ContractListLocalTransactionsRequest,
+) []*transaction.Transaction {
+	filtered := make([]*transaction.Transaction, 0, len(txs))
+	for _, tx := range txs {
+		if tx == nil {
+			continue
+		}
+		if !shouldIncludeTransaction(tx, req) {
+			continue
+		}
+		filtered = append(filtered, tx)
+	}
+	return filtered
+}
+
+func shouldIncludeTransaction(
+	tx *transaction.Transaction,
+	req contracts.ContractListLocalTransactionsRequest,
+) bool {
+	if req.ContractDID != "" && !strings.EqualFold(tx.ContractDID, req.ContractDID) {
+		return false
+	}
+	if req.PaymentValidatorDID != "" && !strings.EqualFold(tx.PaymentValidatorDID, req.PaymentValidatorDID) {
+		return false
+	}
+	if req.UniqueID != "" && !strings.EqualFold(tx.UniqueID, req.UniqueID) {
+		return false
+	}
+	if req.TxHash != "" && !strings.EqualFold(tx.TxHash, req.TxHash) {
+		return false
+	}
+	if !matchesTransactionAddressFilters(tx, req) {
+		return false
+	}
+
+	if len(req.Status) > 0 {
+		matchesStatus := false
+		for _, status := range req.Status {
+			if strings.EqualFold(strings.TrimSpace(status), tx.Status) {
+				matchesStatus = true
+				break
+			}
+		}
+		if !matchesStatus {
+			return false
+		}
+	}
+
+	for key, value := range req.Metadata {
+		txValue, exists := tx.Metadata[key]
+		if !exists || fmt.Sprint(txValue) != value {
+			return false
+		}
+	}
+
+	return true
+}
+
+func matchesTransactionAddressFilters(
+	tx *transaction.Transaction,
+	req contracts.ContractListLocalTransactionsRequest,
+) bool {
+	if req.Blockchain == "" && req.FromAddress == "" && req.ToAddress == "" {
+		return true
+	}
+
+	blockchain := strings.TrimSpace(req.Blockchain)
+	fromAddress := strings.TrimSpace(req.FromAddress)
+	toAddress := strings.TrimSpace(req.ToAddress)
+
+	bMatched := blockchain == ""
+	fMatched := fromAddress == ""
+	tMatched := toAddress == ""
+
+	for _, addr := range tx.ToAddress {
+		if !bMatched && strings.EqualFold(strings.TrimSpace(addr.Blockchain), blockchain) {
+			bMatched = true
+		}
+		if !fMatched && strings.EqualFold(strings.TrimSpace(addr.RequesterAddr), fromAddress) {
+			fMatched = true
+		}
+		if !tMatched && strings.EqualFold(strings.TrimSpace(addr.ProviderAddr), toAddress) {
+			tMatched = true
+		}
+
+		if bMatched && fMatched && tMatched {
+			return true
+		}
+	}
+
+	return bMatched && fMatched && tMatched
+}
+
+func sortLocalTransactions(txs []*transaction.Transaction, sortBy string) {
+	if len(txs) < 2 {
+		return
+	}
+
+	desc := strings.HasPrefix(sortBy, "-")
+	field := strings.TrimPrefix(strings.TrimSpace(sortBy), "-")
+	if field == "" {
+		field = "created_at"
+	}
+
+	sort.SliceStable(txs, func(i, j int) bool {
+		if desc {
+			return txSortLess(txs[j], txs[i], field)
+		}
+		return txSortLess(txs[i], txs[j], field)
+	})
+}
+
+func txSortLess(left, right *transaction.Transaction, field string) bool {
+	switch field {
+	case "status":
+		return strings.ToLower(left.Status) < strings.ToLower(right.Status)
+	case "created_at":
+		fallthrough
+	default:
+		return left.CreatedAt < right.CreatedAt
+	}
+}
+
+func paginateLocalTransactions(txs []*transaction.Transaction, offset, limit int) []*transaction.Transaction {
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= len(txs) {
+		return []*transaction.Transaction{}
+	}
+
+	if limit <= 0 {
+		return txs[offset:]
+	}
+
+	end := offset + limit
+	if end > len(txs) {
+		end = len(txs)
+	}
+	return txs[offset:end]
 }
 
 func (n *Node) handlePaymentStatus(msg actor.Envelope) {
