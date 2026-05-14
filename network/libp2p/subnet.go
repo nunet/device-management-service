@@ -37,8 +37,8 @@ import (
 )
 
 const (
-	IfaceMTU      = 1420
-	MaxPacketSize = 2 * 1420 // Consistent packet size limit
+	IfaceMTU      = 1280 // sticking to quic limit for now
+	MaxPacketSize = IfaceMTU
 )
 
 type NetInterfaceFactory func(name string) (sys.NetInterface, error)
@@ -600,7 +600,7 @@ func (l *Libp2p) handleIPProxyConn(
 				snet.cleanupConn(addr.String(), conn)
 				return
 			default:
-				b := make([]byte, 2000)
+				b := make([]byte, MaxPacketSize)
 				n, err := conn.ReadPacket(b)
 				if err != nil {
 					errChan <- fmt.Errorf("failed to read from connection: %w", err)
@@ -783,7 +783,7 @@ func (s *subnet) proxyPacket(
 					s.cleanupConn(destIP, ipconn)
 					return
 				default:
-					b := make([]byte, 2000)
+					b := make([]byte, MaxPacketSize)
 					n, err := ipconn.ReadPacket(b)
 					if err != nil {
 						log.Errorf("failed to read from outgoing connection: %v (subnet=%s, dst=%s)", err, s.info.id, dst.String())
@@ -926,8 +926,8 @@ func (s *subnet) readPackets(ctx context.Context, iface sys.NetInterface) {
 				}
 
 				if plen > MaxPacketSize {
-					log.Debugf("received packet with length %d, truncating to %d", plen, MaxPacketSize)
-					plen = MaxPacketSize
+					log.Errorf("received invalid packet length %d exceeding buffer size %d, dropping packet", plen, len(packet))
+					continue
 				}
 
 				srcPort, destPort, srcIP, destIP, err := s.parseIPPacket(packet)
