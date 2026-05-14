@@ -99,6 +99,7 @@ type DeploymentListCmd struct {
 	Limit         int               `json:"limit,omitempty"`
 	Offset        int               `json:"offset,omitempty"`
 	Status        []string          `json:"status,omitempty"`
+	ID            string            `json:"id,omitempty"`
 	CreatedAfter  string            `json:"created_after,omitempty"`
 	CreatedBefore string            `json:"created_before,omitempty"`
 	UpdatedAfter  string            `json:"updated_after,omitempty"`

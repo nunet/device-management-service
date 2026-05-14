@@ -1122,6 +1122,7 @@ Examples:
 
 			// Status filter
 			cmd.Flags().StringSliceVar(&p.Status, "status", nil, "Filter by deployment status (can specify multiple, e.g., --status Running --status Failed)")
+			cmd.Flags().StringVar(&p.ID, "id", "", "Filter by deployment ID")
 
 			// Date filters
 			cmd.Flags().StringVar(&p.CreatedAfter, "created-after", "", "Filter deployments created after this date (RFC3339 or relative: 1h, 1d, etc.)")
@@ -1140,6 +1141,7 @@ Examples:
 
 			req := &node.DeploymentListRequest{
 				Metadata: payload.Metadata,
+				ID:       payload.ID,
 				Limit:    payload.Limit,
 				Offset:   payload.Offset,
 				SortBy:   payload.SortBy,
@@ -1205,6 +1207,9 @@ Examples:
   # Filter by status
   nunet actor cmd --context user /dms/node/deployment/list --status Running --status Failed
 
+  # Filter by deployment/orchestrator ID
+  nunet actor cmd --context user /dms/node/deployment/list --id <deployment_id>
+
   # Filter by creation date (relative)
   nunet actor cmd --context user /dms/node/deployment/list --created-after "7d"
 
@@ -1215,7 +1220,7 @@ Examples:
   nunet actor cmd --context user /dms/node/deployment/list --status Running --created-after "1d" --limit 50 --sort "-created_at"
 
   # With metadata filter
-  nunet actor cmd --context user /dms/node/deployment/list --filter "environment=production" --status Running --limit 10`,
+  nunet actor cmd --context user /dms/node/deployment/list --filter "environment=production" --status Running --id <deployment_id> --limit 10`,
 	},
 
 	// /dms/node/deployment/prune
