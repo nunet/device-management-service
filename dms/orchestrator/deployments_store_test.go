@@ -106,6 +106,21 @@ func TestCloverDeploymentStore_Query(t *testing.T) {
 		}
 	})
 
+	t.Run("query with orchestrator id filter", func(t *testing.T) {
+		t.Parallel()
+		store, cleanup := setupTestStoreWithDeployments(t)
+		defer cleanup()
+
+		query := DeploymentQuery{
+			OrchestratorID: "deploy-2",
+		}
+		deployments, total, err := store.Query(query)
+		require.NoError(t, err)
+		assert.Equal(t, 1, total)
+		require.Equal(t, 1, len(deployments))
+		assert.Equal(t, "deploy-2", deployments[0].OrchestratorID)
+	})
+
 	t.Run("query with multiple status filters", func(t *testing.T) {
 		t.Parallel()
 		store, cleanup := setupTestStoreWithDeployments(t)

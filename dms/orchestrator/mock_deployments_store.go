@@ -127,6 +127,11 @@ func (m *mockDeploymentStore) Query(q DeploymentQuery) ([]*jtypes.OrchestratorVi
 	// Apply filters
 	filtered := make([]*jtypes.OrchestratorView, 0)
 	for _, deployment := range allDeployments {
+		// Orchestrator ID filter
+		if q.OrchestratorID != "" && deployment.OrchestratorID != q.OrchestratorID {
+			continue
+		}
+
 		// Status filter
 		if len(q.StatusFilter) > 0 {
 			found := false
