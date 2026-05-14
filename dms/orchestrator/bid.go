@@ -848,6 +848,10 @@ func (b *BidCoordinator) makeResidualBidRequest(
 	for n, bids := range candidate {
 		newBids := make([]jtypes.Bid, 0, len(bids))
 		desiredSize := int(math.Floor(float64(rand.Intn(len(bids))) / 2))
+		// randomize order of bids
+		rand.Shuffle(len(bids), func(i, j int) {
+			bids[i], bids[j] = bids[j], bids[i]
+		})
 		for i, bid := range bids {
 			if i > desiredSize {
 				log.Infof("dropping bid from %s (%s) from candidate ", bid.Peer(), bid.V1.Handle.DID)
