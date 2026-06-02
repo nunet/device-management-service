@@ -65,6 +65,7 @@ type ClientInterface interface {
 	RemoveObjectsWithLabel(ctx context.Context, label string, value string) error
 	FindContainer(ctx context.Context, label string, value string) (string, error)
 	GetImage(ctx context.Context, imageName string) (image.Summary, error)
+	InspectImage(ctx context.Context, imageName string) (dockertypes.ImageInspect, error)
 	PullImage(ctx context.Context, imageName string, imagePullOpts image.PullOptions) (string, error)
 	GetOutputStream(
 		ctx context.Context,
@@ -433,6 +434,12 @@ func (c *Client) HasImage(ctx context.Context, imageName string) bool {
 	}
 
 	return true
+}
+
+// InspectImage returns the full inspect data for a Docker image, including its Config.
+func (c *Client) InspectImage(ctx context.Context, imageName string) (dockertypes.ImageInspect, error) {
+	inspect, _, err := c.client.ImageInspectWithRaw(ctx, imageName)
+	return inspect, err
 }
 
 // GetImage returns detailed information about a Docker image.
