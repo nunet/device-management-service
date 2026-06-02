@@ -604,14 +604,45 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to prepare init scripts: %w", err)
 	}
 
+	imagePullOpts := image.PullOptions{}
+	if dockerArgs.RegistryAuth.Username != "" && dockerArgs.RegistryAuth.Password != "" {
+		registryAuth := `{"username":"` + dockerArgs.RegistryAuth.Username +
+			`","password":"` + dockerArgs.RegistryAuth.Password + `"}`
+		imagePullOpts.RegistryAuth = base64.StdEncoding.EncodeToString([]byte(registryAuth))
+	}
+
+	// Pull the image before building the provision wrapper so we can inspect
+	// the image's original entrypoint. Without this, the pull would happen
+	// inside CreateContainer, after the wrapper is already constructed.
+	if !e.client.HasImage(ctx, dockerArgs.Image) {
+		if _, err := e.client.PullImage(ctx, dockerArgs.Image, imagePullOpts); err != nil {
+			return "", fmt.Errorf("failed to pull image: %w", err)
+		}
+	}
+
 	if initScriptsDir != "" {
 		oldEntryPoint := containerConfig.Entrypoint
 		oldCmd := containerConfig.Cmd
 
-		// Execute init scripts first
+		// When the user did not explicitly override the entrypoint, read it from
+		// the image. Without this, the CMD (e.g. "gateway") would be executed as
+		// a bare shell command rather than as an argument to the image's real
+		// entrypoint binary.
+		if len(oldEntryPoint) == 0 {
+			if imageInfo, err := e.client.InspectImage(ctx, dockerArgs.Image); err == nil {
+				oldEntryPoint = imageInfo.Config.Entrypoint
+				if len(oldCmd) == 0 {
+					oldCmd = imageInfo.Config.Cmd
+				}
+			} else {
+				log.Warnf("failed to inspect image %s for entrypoint, provision wrapper may be incomplete: %v",
+					dockerArgs.Image, err)
+			}
+		}
+
 		containerConfig.Entrypoint = []string{"/bin/sh", "-c"}
 		containerConfig.Cmd = []string{
-			fmt.Sprintf("%s/run_provision_scripts.sh && %s %s",
+			fmt.Sprintf("%s/run_provision_scripts.sh && exec %s %s",
 				initScriptsDir,
 				strings.Join(oldEntryPoint, " "),
 				strings.Join(oldCmd, " ")),
@@ -631,15 +662,6 @@ func (e *Executor) newDockerExecutionContainer(
 		return "", fmt.Errorf("failed to configure host config: %w", err)
 	}
 
-	imagePullOpts := image.PullOptions{}
-	if dockerArgs.RegistryAuth.Username != "" && dockerArgs.RegistryAuth.Password != "" {
-		registryAuth := `{"username":"` + dockerArgs.RegistryAuth.Username +
-			`","password":"` + dockerArgs.RegistryAuth.Password + `"}`
-		imagePullOpts.RegistryAuth = base64.StdEncoding.EncodeToString([]byte(registryAuth))
-	}
-
-	hasImage := e.client.HasImage(ctx, dockerArgs.Image)
-
 	executionContainer, err := e.client.CreateContainer(
 		ctx,
 		&containerConfig,
@@ -648,7 +670,7 @@ func (e *Executor) newDockerExecutionContainer(
 		imagePullOpts,
 		nil,
 		params.JobID,
-		!hasImage, // only pull if we don't have the image
+		false, // image already pulled above
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
