@@ -95,6 +95,16 @@ func TestDeploymentListBehavior(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "valid id filter",
+			args: []string{"--id", "test_deployment_id"},
+			opts: client.NewMessageOptions(),
+			expectedReq: node.DeploymentListRequest{
+				ID:     "test_deployment_id",
+				SortBy: "-created_at", // Default sort value
+			},
+			wantErr: false,
+		},
+		{
 			name: "multiple filters",
 			args: []string{"--filter", "namespace=test_namespace", "--filter", "name=test_name"},
 			opts: client.NewMessageOptions(),

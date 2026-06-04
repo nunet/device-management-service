@@ -429,6 +429,53 @@ func TestHandleDeploymentList(t *testing.T) {
 		assert.Equal(t, jobtypes.DeploymentStatusPreparing.String(), resp.Deployments[0].Status)
 	})
 
+	t.Run("with id filter", func(t *testing.T) {
+		t.Parallel()
+
+		node, sActor, _ := newMockNodeWithOrchestratorRegistryAndSender(t, behaviors.DeploymentListBehavior)
+
+		eCfg := jobtypes.EnsembleConfig{
+			V1: &jobtypes.EnsembleConfigV1{
+				Allocations: map[string]jobtypes.AllocationConfig{},
+				Nodes:       map[string]jobtypes.NodeConfig{},
+				Supervisor:  jobtypes.SupervisorConfig{},
+				Subnet:      jobtypes.SubnetConfig{},
+			},
+		}
+		mockOrch, err := node.createOrchestrator(context.Background(), eCfg, nil)
+		require.NoError(t, err)
+		require.NotNil(t, mockOrch)
+
+		otherOrch, err := node.createOrchestrator(context.Background(), eCfg, nil)
+		require.NoError(t, err)
+		require.NotNil(t, otherOrch)
+
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.DeploymentListBehavior,
+			DeploymentListRequest{
+				ID: mockOrch.ID(),
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		assert.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp DeploymentListResponse
+		err = json.Unmarshal(reply.Message, &resp)
+		assert.NoError(t, err)
+		require.Equal(t, 1, len(resp.Deployments))
+		assert.Equal(t, mockOrch.ID(), resp.Deployments[0].OrchestratorID)
+		assert.NotEqual(t, otherOrch.ID(), resp.Deployments[0].OrchestratorID)
+		assert.Equal(t, 1, resp.Total)
+	})
+
 	t.Run("with pagination", func(t *testing.T) {
 		t.Parallel()
 
@@ -472,7 +519,7 @@ func TestHandleDeploymentList(t *testing.T) {
 		err = json.Unmarshal(reply.Message, &resp)
 		assert.NoError(t, err)
 		assert.Equal(t, 2, len(resp.Deployments))
-		assert.GreaterOrEqual(t, resp.Total, 5)
+		assert.Equal(t, 5, resp.Total) // total = len(all) since no filter applied
 		assert.True(t, resp.HasMore)
 
 		// Test second page

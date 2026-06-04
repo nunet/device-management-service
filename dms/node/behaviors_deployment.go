@@ -281,6 +281,9 @@ type DeploymentListRequest struct {
 	// Status filter (for JSON API - parsed from strings in CLI)
 	Status []jobtypes.DeploymentStatus `json:"status,omitempty"` // Filter by one or more statuses
 
+	// ID filter
+	ID string `json:"id,omitempty"` // Filter by deployment ID
+
 	// Date filters (for JSON API)
 	CreatedAfter  *time.Time `json:"created_after,omitempty"`  // Filter by CreatedAt >= value
 	CreatedBefore *time.Time `json:"created_before,omitempty"` // Filter by CreatedAt <= value
@@ -339,6 +342,9 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 	if len(request.Status) > 0 {
 		query.StatusFilter = request.Status
 	}
+	if request.ID != "" {
+		query.OrchestratorID = request.ID
+	}
 
 	// Date filters
 	if request.CreatedAfter != nil {
@@ -379,7 +385,14 @@ func (n *Node) handleDeploymentList(msg actor.Envelope) {
 
 	// Calculate pagination metadata
 	resp.Deployments = filteredDeployments
-	resp.Total = total
+	// if filter applied, total = len(filteredDeployments)
+	// if no filter applied, total = total from query
+	if len(request.Metadata) > 0 {
+		resp.Total = len(filteredDeployments)
+	} else {
+		resp.Total = total
+	}
+
 	resp.HasMore = request.Limit > 0 && (request.Offset+len(filteredDeployments) < total)
 	if resp.HasMore {
 		resp.NextOffset = request.Offset + len(filteredDeployments)

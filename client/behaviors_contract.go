@@ -84,13 +84,13 @@ func (c *Client) ListIncoming(ctx context.Context, req contracts.ContractListInc
 	return response, err
 }
 
-func (c *Client) ListTransactions(ctx context.Context, opts ...Option) (contracts.ContractListLocalTransactionsResponse, error) {
+func (c *Client) ListTransactions(ctx context.Context, req contracts.ContractListLocalTransactionsRequest, opts ...Option) (contracts.ContractListLocalTransactionsResponse, error) {
 	var response contracts.ContractListLocalTransactionsResponse
 
 	resp, err := c.InvokeBehavior(
 		ctx,
 		behaviors.ContractListLocalTransactionsBehavior,
-		struct{}{},
+		req,
 		opts...,
 	)
 	if err != nil {

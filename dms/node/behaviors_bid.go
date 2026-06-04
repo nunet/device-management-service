@@ -441,14 +441,14 @@ loop:
 		if !n.dmsConfig.General.ComputeGateway {
 			comparisonResult, err := machineResources.Compare(v.V1.Resources)
 			if err != nil {
-				log.Debugw("compare_machine_resources_error",
+				log.Errorw("compare_machine_resources_error",
 					"labels", string(observability.LabelDeployment),
 					"error", err)
 				continue loop
 			}
 
 			if comparisonResult != types.Better {
-				log.Debugw("resource_not_better",
+				log.Infow("resource_not_better",
 					"labels", string(observability.LabelDeployment),
 					"comparisonResult", comparisonResult)
 				continue

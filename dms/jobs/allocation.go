@@ -765,6 +765,26 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 		return nil
 	}
 
+	stat, err := a.executor.GetStatus(ctx, a.executionID)
+	if err != nil {
+		log.Warnw("allocation_failed_to_get_execution_status",
+			"labels", string(observability.LabelAllocation),
+			"allocationID", a.ID,
+			"error", err)
+		// this can be taken as execution doesn't exist
+		return nil
+	}
+
+	log.Debugw("allocation_execution_status",
+		"labels", string(observability.LabelAllocation),
+		"allocationID", a.ID,
+		"status", string(stat))
+
+	// if already exited, just return
+	if stat == types.ExecutionStatusFailed || stat == types.ExecutionStatusSuccess {
+		return nil
+	}
+
 	if err := a.executor.Cancel(ctx, a.executionID); err != nil {
 		a.setStatus(AllocationFailed, fmt.Sprintf("error stopping executor: %v", err), true)
 		return fmt.Errorf("stop execution: %w", err)
@@ -773,6 +793,7 @@ func (a *Allocation) stopExecution(ctx context.Context) error {
 	log.Debugw("allocation_stopped_execution",
 		"labels", string(observability.LabelAllocation),
 		"allocationID", a.ID)
+
 	return nil
 }
 
@@ -844,6 +865,7 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 		})
 	}
 
+	var stopError error
 	status := a.Status().Status
 	if status != AllocationStopped && status != AllocationCompleted {
 		err := a.Stop(ctx)
@@ -852,11 +874,12 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 				"labels", string(observability.LabelAllocation),
 				"error", err,
 				"allocationID", a.ID)
-			return fmt.Errorf("failed to stop allocation: %w", err)
+			// error only if cleanup fails too
+			stopError = fmt.Errorf("failed to stop allocation: %w", err)
+		} else {
+			// terminated status only if had to stop
+			a.setStatus(AllocationTerminated, "allocation terminated", true)
 		}
-
-		// terminated status only if had to stop
-		a.setStatus(AllocationTerminated, "allocation terminated", true)
 	}
 
 	if err := a.Cleanup(); err != nil {
@@ -864,6 +887,10 @@ func (a *Allocation) Terminate(ctx context.Context) error {
 			"labels", string(observability.LabelAllocation),
 			"error", err,
 			"allocationID", a.ID)
+
+		if stopError != nil {
+			return fmt.Errorf("stop and cleanup failed - stop: %v - cleanup: %v", stopError, err)
+		}
 	}
 
 	return nil

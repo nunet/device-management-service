@@ -141,11 +141,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a settle request",
 		Long: `Invoke the /dms/tokenomics/contract/settle behavior on an actor
 									
-									This behavior calls the contract settle behaviour.
-									
-									Examples:
-									
-									  nunet actor cmd --context user /dms/tokenomics/contract/settle --contract-did <did> --contract-host-did <hostdid>`,
+This behavior calls the contract settle behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/settle --contract-did <did> --contract-host-did <hostdid>`,
 	},
 	// /dms/tokenomics/contract/terminate
 	behaviors.ContractTerminationBehavior: {
@@ -185,11 +185,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a termination request",
 		Long: `Invoke the /dms/tokenomics/contract/terminate behavior on an actor
 								
-								This behavior calls the contract terminate behaviour.
-								
-								Examples:
-								
-								  nunet actor cmd --context user /dms/tokenomics/contract/terminate --contract-did <did> --contract-host-did <hostdid>`,
+This behavior calls the contract terminate behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/terminate --contract-did <did> --contract-host-did <hostdid>`,
 	},
 	// /dms/tokenomics/contract/complete
 	behaviors.ContractCompleteBehavior: {
@@ -229,11 +229,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a contract complete request",
 		Long: `Invoke the /dms/tokenomics/contract/complete behavior on an actor
 								
-								This behavior calls the contract complete behaviour.
-								
-								Examples:
-								
-								  nunet actor cmd --context user /dms/tokenomics/contract/complete --contract-did <did> --contract-host-did <hostdid>`,
+This behavior calls the contract complete behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/complete --contract-did <did> --contract-host-did <hostdid>`,
 	},
 	// /dms/tokenomics/contract/validate
 	behaviors.ContractValidationBehavior: {
@@ -273,11 +273,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a contract validate request",
 		Long: `Invoke the /dms/tokenomics/contract/validate behavior on an actor
 								
-								This behavior calls the contract validate behaviour.
-								
-								Examples:
-								
-								  nunet actor cmd --context user /dms/tokenomics/contract/validate --contract-did <did> --contract-host-did <hostdid>`,
+This behavior calls the contract validate behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/validate --contract-did <did> --contract-host-did <hostdid>`,
 	},
 	// /dms/tokenomics/contract/state
 	behaviors.ContractStatusBehavior: {
@@ -318,11 +318,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a contract state request",
 		Long: `Invoke the /dms/tokenomics/contract/state behavior on an actor
 		
-		This behavior calls the actors contract state behaviour.
-		
-		Examples:
-		
-		  nunet actor cmd --context user /dms/tokenomics/contract/state --contract-did <did> --contract-host-did <hostdid>`,
+This behavior calls the actors contract state behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/state --contract-did <did> --contract-host-did <hostdid>`,
 	},
 	// /dms/tokenomics/contract/payment/status
 	behaviors.ContractPaymentStatusBehavior: {
@@ -352,11 +352,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a payment status request",
 		Long: `Invoke the /dms/tokenomics/contract/payment/status behavior on an actor
 							
-							This behavior calls the payment status behaviour.
-							
-							Examples:
-							
-							  nunet actor cmd --context user /dms/tokenomics/contract/payment/status --unique-id <uniqueid>`,
+This behavior calls the payment status behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/payment/status --unique-id <uniqueid>`,
 	},
 	// /dms/tokenomics/contract/usages/calculate
 	behaviors.ContractUsagesCalculateBehavior: {
@@ -379,13 +379,13 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Action: bInvoke,
 		Short:  "Send a usage calculation request",
 		Long: `Invoke the /dms/tokenomics/contract/usages/calculate behavior on an actor
-						
-						This behavior calls the actors contract calculate usages behaviour.
-						
-						Examples:
-						
-						  nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate
-						  nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate --contract-did did:key:...`,
+	
+This behavior calls the actors contract calculate usages behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate
+	nunet actor cmd --context user /dms/tokenomics/contract/usages/calculate --contract-did did:key:...`,
 	},
 	// /dms/tokenomics/contract/transactions/confirm
 	behaviors.ContractConfirmLocalTransactionBehavior: {
@@ -423,16 +423,52 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a confirm transactions request",
 		Long: `Invoke the /dms/tokenomics/contract/transactions/confirm behavior on an actor
 							
-							This behavior calls the actors contract confirm transactions behaviour.
-							
-							Examples:
-							
-							  nunet actor cmd --context user /dms/tokenomics/contract/transactions/confirm --unique-id <uniqueid> --tx-hash <txhash> --blockchain ETHEREUM`,
+This behavior calls the actors contract confirm transactions behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/transactions/confirm --unique-id <uniqueid> --tx-hash <txhash> --blockchain ETHEREUM`,
 	},
 	// /dms/tokenomics/contract/transactions/list
 	behaviors.ContractListLocalTransactionsBehavior: {
+		Payload: func() any { return &ContractListLocalTransactionsCmd{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*ContractListLocalTransactionsCmd)
+			cmd.Flags().StringToStringVarP(&p.Metadata, "filter", "f", nil, "metadata filter to match transactions (optional)")
+			cmd.Flags().StringSliceVar(&p.Status, "status", nil, "filter by transaction status (can specify multiple)")
+			cmd.Flags().StringVar(&p.ContractDID, "contract-did", "", "filter by contract DID")
+			cmd.Flags().StringVar(&p.PaymentValidatorDID, "payment-validator-did", "", "filter by payment validator DID")
+			cmd.Flags().StringVar(&p.UniqueID, "unique-id", "", "filter by transaction unique ID")
+			cmd.Flags().StringVar(&p.TxHash, "tx-hash", "", "filter by transaction hash")
+			cmd.Flags().StringVar(&p.Blockchain, "blockchain", "", "filter by blockchain used")
+			cmd.Flags().StringVar(&p.ToAddress, "to-address", "", "filter by receiver address")
+			cmd.Flags().StringVar(&p.FromAddress, "from-address", "", "filter by sender address")
+			cmd.Flags().IntVar(&p.Limit, "limit", 0, "maximum number of results to return (0 = no limit)")
+			cmd.Flags().IntVar(&p.Offset, "offset", 0, "number of results to skip")
+			cmd.Flags().StringVar(&p.SortBy, "sort", "", "sort field and direction (only status/-status and created_at/-created_at supported)")
+		},
 		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
-			resp, err := dmsClient.ListTransactions(ctx, opts.MsgOpts...)
+			payload, ok := opts.Payload.(*ContractListLocalTransactionsCmd)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode ContractListLocalTransactionsCmd payload")
+			}
+
+			req := contracts.ContractListLocalTransactionsRequest{
+				Metadata:            payload.Metadata,
+				Status:              payload.Status,
+				ContractDID:         payload.ContractDID,
+				PaymentValidatorDID: payload.PaymentValidatorDID,
+				UniqueID:            payload.UniqueID,
+				Blockchain:          payload.Blockchain,
+				FromAddress:         payload.FromAddress,
+				ToAddress:           payload.ToAddress,
+				TxHash:              payload.TxHash,
+				Limit:               payload.Limit,
+				Offset:              payload.Offset,
+				SortBy:              payload.SortBy,
+			}
+
+			resp, err := dmsClient.ListTransactions(ctx, req, opts.MsgOpts...)
 			if err != nil {
 				return resp, err
 			}
@@ -442,11 +478,13 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a list transactions request",
 		Long: `Invoke the /dms/tokenomics/contract/transactions/list behavior on an actor
 						
-						This behavior calls the actors contract list transactions behaviour.
-						
-						Examples:
-						
-						  nunet actor cmd --context user /dms/tokenomics/contract/transactions/list`,
+This behavior calls the actors contract list transactions behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/transactions/list
+	nunet actor cmd --context user /dms/tokenomics/contract/transactions/list --status unpaid --limit 50 --offset 100
+	nunet actor cmd --context user /dms/tokenomics/contract/transactions/list --contract-did did:key:... --sort -unique_id`,
 	},
 	// /dms/tokenomics/contract/payment/quote/get
 	behaviors.ContractGetPaymentQuoteBehavior: {
@@ -482,11 +520,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Get a payment quote for a transaction",
 		Long: `Invoke the /dms/tokenomics/contract/payment/quote/get behavior on an actor
 						
-						This behavior gets a real-time payment quote for a transaction requiring currency conversion.
-						
-						Examples:
-						
-						  nunet actor cmd --context user /dms/tokenomics/contract/payment/quote/get --unique-id <unique_id>`,
+This behavior gets a real-time payment quote for a transaction requiring currency conversion.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/payment/quote/get --unique-id <unique_id>`,
 	},
 	// /dms/tokenomics/contract/payment/quote/validate
 	behaviors.ContractValidatePaymentQuoteBehavior: {
@@ -522,11 +560,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Validate a payment quote",
 		Long: `Invoke the /dms/tokenomics/contract/payment/quote/validate behavior on an actor
 						
-						This behavior validates a payment quote before payment execution.
-						
-						Examples:
-						
-						  nunet actor cmd --context user /dms/tokenomics/contract/payment/quote/validate --quote-id <quote_id>`,
+This behavior validates a payment quote before payment execution.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/payment/quote/validate --quote-id <quote_id>`,
 	},
 	// /dms/tokenomics/contract/payment/quote/cancel
 	behaviors.ContractCancelPaymentQuoteBehavior: {
@@ -562,11 +600,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Cancel a payment quote",
 		Long: `Invoke the /dms/tokenomics/contract/payment/quote/cancel behavior on an actor
 						
-						This behavior cancels/invalidates a payment quote.
-						
-						Examples:
-						
-						  nunet actor cmd --context user /dms/tokenomics/contract/payment/quote/cancel --quote-id <quote_id>`,
+This behavior cancels/invalidates a payment quote.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/payment/quote/cancel --quote-id <quote_id>`,
 	},
 	// /dms/tokenomics/contract/list_incoming
 	behaviors.ContractListBehavior: {
@@ -591,11 +629,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a list incoming contract request",
 		Long: `Invoke the /dms/tokenomics/contract/list_incoming behavior on an actor
 					
-					This behavior calls the actors contract list behaviour.
-					
-					Examples:
-					
-					  nunet actor cmd --context user /dms/tokenomics/contract/list_incoming`,
+This behavior calls the actors contract list behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/list_incoming`,
 	},
 	// /dms/tokenomics/contract/aprove_local
 	behaviors.ContractApproveLocalBehavior: {
@@ -626,11 +664,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a contract approval request",
 		Long: `Invoke the /dms/tokenomics/contract/aprove_local behavior on an actor
 				
-				This behavior calls the actors contract approval behaviour.
-				
-				Examples:
-				
-				  nunet actor cmd --context user /dms/tokenomics/contract/aprove_local --contract-did <did>`,
+This behavior calls the actors contract approval behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/aprove_local --contract-did <did>`,
 	},
 	// /dms/tokenomics/contract/create
 	behaviors.ContractCreateBehavior: {
@@ -668,11 +706,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a create contract message",
 		Long: `Invoke the /dms/tokenomics/contract/create behavior on an actor
 		
-		This behavior calls the actors create contract behaviour.
-		
-		Examples:
-		
-		  nunet actor cmd --context user /dms/tokenomics/contract/create --contract-file <file> --dest <did_of_solution_enabler>`,
+This behavior calls the actors create contract behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/tokenomics/contract/create --contract-file <file> --dest <did_of_solution_enabler>`,
 	},
 	// /dms/volume/create
 	behaviors.VolumeCreateBehavior: {
@@ -722,11 +760,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a create volume message",
 		Long: `Invoke the /dms/volume/create behavior on an actor
 	
-	This behavior calls the actors create volume behaviour.
-	
-	Examples:
-	
-	  nunet actor cmd --context user /dms/volume/create --name <volname> --client-pem-file <filename>`,
+This behavior calls the actors create volume behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/volume/create --name <volname> --client-pem-file <filename>`,
 	},
 	// /dms/volume/delete
 	behaviors.VolumeDeleteBehavior: {
@@ -750,11 +788,11 @@ var registeredBehaviors = map[string]*behaviorConfig{
 		Short:  "Send a delete volume message",
 		Long: `Invoke the /dms/volume/delete behavior on an actor
 		
-		This behavior calls the actors delete volume behaviour.
-		
-		Examples:
-		
-		  nunet actor cmd --context user /dms/volume/delete --name <volname>`,
+This behavior calls the actors delete volume behaviour.
+
+Examples:
+
+	nunet actor cmd --context user /dms/volume/delete --name <volname>`,
 	},
 	// /dms/volume/start
 	behaviors.VolumeStartBehavior: {
@@ -1084,6 +1122,7 @@ Examples:
 
 			// Status filter
 			cmd.Flags().StringSliceVar(&p.Status, "status", nil, "Filter by deployment status (can specify multiple, e.g., --status Running --status Failed)")
+			cmd.Flags().StringVar(&p.ID, "id", "", "Filter by deployment ID")
 
 			// Date filters
 			cmd.Flags().StringVar(&p.CreatedAfter, "created-after", "", "Filter deployments created after this date (RFC3339 or relative: 1h, 1d, etc.)")
@@ -1102,6 +1141,7 @@ Examples:
 
 			req := &node.DeploymentListRequest{
 				Metadata: payload.Metadata,
+				ID:       payload.ID,
 				Limit:    payload.Limit,
 				Offset:   payload.Offset,
 				SortBy:   payload.SortBy,
@@ -1167,6 +1207,9 @@ Examples:
   # Filter by status
   nunet actor cmd --context user /dms/node/deployment/list --status Running --status Failed
 
+  # Filter by deployment/orchestrator ID
+  nunet actor cmd --context user /dms/node/deployment/list --id <deployment_id>
+
   # Filter by creation date (relative)
   nunet actor cmd --context user /dms/node/deployment/list --created-after "7d"
 
@@ -1177,7 +1220,7 @@ Examples:
   nunet actor cmd --context user /dms/node/deployment/list --status Running --created-after "1d" --limit 50 --sort "-created_at"
 
   # With metadata filter
-  nunet actor cmd --context user /dms/node/deployment/list --filter "environment=production" --status Running --limit 10`,
+  nunet actor cmd --context user /dms/node/deployment/list --filter "environment=production" --status Running --id <deployment_id> --limit 10`,
 	},
 
 	// /dms/node/deployment/prune

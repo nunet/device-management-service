@@ -44,7 +44,7 @@ var (
 	// Setting a big timeout as the user might have to
 	// download large execution images
 	AllocationStartTimeout    = 5 * time.Minute
-	AllocationShutdownTimeout = 5 * time.Second
+	AllocationShutdownTimeout = 15 * time.Second
 
 	MinEnsembleDeploymentTime = 15 * time.Second
 	MinEnsembleUpdateTimeout  = 15 * time.Second

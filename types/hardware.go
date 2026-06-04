@@ -178,6 +178,17 @@ func (gpus GPUs) Copy() GPUs {
 }
 
 func (gpus GPUs) Compare(other GPUs) (Comparison, error) {
+	// handle easy cases
+	if len(gpus) == 0 && len(other) == 0 {
+		return Equal, nil
+	}
+	if len(gpus) == 0 && len(other) > 0 {
+		return Worse, nil
+	}
+	if len(gpus) > 0 && len(other) == 0 {
+		return Better, nil
+	}
+
 	interimComparison1 := make([][]Comparison, 0)
 	for _, otherGPU := range other {
 		var interimComparison2 []Comparison
@@ -217,10 +228,20 @@ func (gpus GPUs) Compare(other GPUs) (Comparison, error) {
 	return Better, nil
 }
 
-func (gpus GPUs) Add(other GPUs) error {
+func (gpus *GPUs) Add(other GPUs) error {
 	// TODO: I think this logic needs to change
-	// 1. if other gpu is in own gpus, add the total vram
-	// 2. if other gpu is not in own gpus, append it to own gpus
+	// 1. if either other is empty, we add all
+	// 2. if other gpu is in own gpus, add the total vram
+	// 3. if other gpu is not in own gpus, append it to own gpus
+
+	if len(other) == 0 {
+		return nil
+	}
+	if len(*gpus) == 0 {
+		*gpus = make(GPUs, len(other))
+		copy(*gpus, other)
+		return nil
+	}
 
 	// assuming that the GPUs are ordered by index
 	// which may not be the case
@@ -229,9 +250,9 @@ func (gpus GPUs) Add(other GPUs) error {
 		otherGPUs[otherGPU.Index] = otherGPU
 	}
 
-	for i, gpu := range gpus {
+	for i, gpu := range *gpus {
 		if otherGPU, ok := otherGPUs[gpu.Index]; ok {
-			if err := gpus[i].Add(otherGPU); err != nil {
+			if err := (*gpus)[i].Add(otherGPU); err != nil {
 				return fmt.Errorf("failed to add GPU %s: %w", gpu.Model, err)
 			}
 		}

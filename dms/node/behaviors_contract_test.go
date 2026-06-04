@@ -14,8 +14,286 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/tokenomics/contracts"
+	"gitlab.com/nunet/device-management-service/tokenomics/store/transaction"
 	"gitlab.com/nunet/device-management-service/types"
 )
+
+func TestHandleListLocalTransactions(t *testing.T) {
+	t.Parallel()
+
+	node, sActor, _ := newMockNodeWithSender(t, behaviors.ContractListLocalTransactionsBehavior)
+
+	// define additional with some params such as requestor repeating
+	require.NoError(t, node.transactionStore.Upsert(transaction.Transaction{
+		UniqueID: "tx-001", ContractDID: "did:key:contract-1",
+		ToAddress: []types.PaymentAddressInfo{
+			{Blockchain: "ETHEREUM", RequesterAddr: "0xREQ1", ProviderAddr: "0xPROV1"},
+		},
+		Metadata: map[string]interface{}{
+			"fee_type": "orchestration",
+		},
+	}))
+	require.NoError(t, node.transactionStore.Upsert(transaction.Transaction{
+		UniqueID: "tx-002", Status: "paid", // one is paid
+		ContractDID: "did:key:contract-2",
+		ToAddress: []types.PaymentAddressInfo{
+			{Blockchain: "ETHEREUM", RequesterAddr: "0xREQ1", ProviderAddr: "0xPROV2"},
+		},
+	}))
+	require.NoError(t, node.transactionStore.Upsert(transaction.Transaction{
+		UniqueID: "tx-003", ContractDID: "did:key:contract-1",
+		ToAddress: []types.PaymentAddressInfo{
+			{Blockchain: "ETHEREUM", RequesterAddr: "0xREQ2", ProviderAddr: "0xPROV1"},
+		},
+	}))
+	require.NoError(t, node.transactionStore.Upsert(transaction.Transaction{
+		UniqueID: "tx-004", ContractDID: "did:key:contract-1",
+		ToAddress: []types.PaymentAddressInfo{
+			{Blockchain: "ETHEREUM", RequesterAddr: "0xREQ2", ProviderAddr: "0xPROV2"},
+		},
+	}))
+	require.NoError(t, node.transactionStore.Upsert(transaction.Transaction{
+		UniqueID: "tx-005", ContractDID: "did:key:contract-2",
+		ToAddress: []types.PaymentAddressInfo{
+			{Blockchain: "CARDANO", RequesterAddr: "0xREQ3", ProviderAddr: "0xPROV3"},
+		},
+	}))
+	require.NoError(t, node.transactionStore.Upsert(transaction.Transaction{
+		UniqueID: "tx-006", ContractDID: "did:key:contract-2",
+		ToAddress: []types.PaymentAddressInfo{
+			{Blockchain: "CARDANO", RequesterAddr: "0xREQ1", ProviderAddr: "0xPROV3"},
+		},
+	}))
+
+	t.Run("filters by fields and metadata", func(t *testing.T) {
+		t.Parallel()
+
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.ContractListLocalTransactionsBehavior,
+			contracts.ContractListLocalTransactionsRequest{
+				Status:      []string{"unpaid"},
+				ContractDID: "did:key:contract-1",
+				Metadata: map[string]string{
+					"fee_type": "orchestration",
+				},
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		require.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp contracts.ContractListLocalTransactionsResponse
+		require.NoError(t, json.Unmarshal(reply.Message, &resp))
+		require.Empty(t, resp.Error)
+		require.Len(t, resp.Transactions, 1)
+		assert.Equal(t, "tx-001", resp.Transactions[0].UniqueID)
+		assert.Equal(t, 1, resp.Total)
+		assert.False(t, resp.HasMore)
+	})
+
+	t.Run("paginates sorted results", func(t *testing.T) {
+		t.Parallel()
+
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.ContractListLocalTransactionsBehavior,
+			contracts.ContractListLocalTransactionsRequest{
+				SortBy: "-unique_id",
+				Limit:  2,
+				Offset: 0,
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		require.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		t.Logf("reply: %s", string(reply.Message))
+
+		var resp contracts.ContractListLocalTransactionsResponse
+		require.NoError(t, json.Unmarshal(reply.Message, &resp))
+		require.Empty(t, resp.Error)
+		require.Len(t, resp.Transactions, 2)
+		assert.Equal(t, "tx-006", resp.Transactions[0].UniqueID)
+		assert.Equal(t, "tx-005", resp.Transactions[1].UniqueID)
+		assert.Equal(t, 6, resp.Total)
+		assert.True(t, resp.HasMore)
+		assert.Equal(t, 2, resp.NextOffset)
+	})
+
+	t.Run("sorts by created_at desc", func(t *testing.T) {
+		t.Parallel()
+
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.ContractListLocalTransactionsBehavior,
+			contracts.ContractListLocalTransactionsRequest{
+				SortBy: "-created_at",
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		require.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp contracts.ContractListLocalTransactionsResponse
+		require.NoError(t, json.Unmarshal(reply.Message, &resp))
+		require.Empty(t, resp.Error)
+		require.Len(t, resp.Transactions, 6)
+		assert.Equal(t, "tx-006", resp.Transactions[0].UniqueID)
+		assert.Equal(t, "tx-001", resp.Transactions[5].UniqueID)
+		assert.NotEqual(t, int64(0), resp.Transactions[0].CreatedAt)
+	})
+
+	t.Run("filters for specific one", func(t *testing.T) {
+		t.Parallel()
+
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.ContractListLocalTransactionsBehavior,
+			contracts.ContractListLocalTransactionsRequest{
+				Blockchain:  "Cardano",
+				FromAddress: "0xREQ1",
+				ToAddress:   "0xPROV3",
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		require.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp contracts.ContractListLocalTransactionsResponse
+		require.NoError(t, json.Unmarshal(reply.Message, &resp))
+		require.Empty(t, resp.Error)
+		require.Len(t, resp.Transactions, 1)
+		assert.Equal(t, "tx-006", resp.Transactions[0].UniqueID)
+	})
+
+	t.Run("for multiple", func(t *testing.T) {
+		t.Parallel()
+
+		// filter on eth from req1
+		msg, err := actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.ContractListLocalTransactionsBehavior,
+			contracts.ContractListLocalTransactionsRequest{
+				Blockchain:  "ethereum", // expecting 2 records with eth+req1 (paid/unpaid)
+				FromAddress: "0xREQ1",
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err := sActor.Invoke(msg)
+		require.NoError(t, err)
+
+		reply := <-replyChan
+		defer reply.Discard()
+
+		var resp contracts.ContractListLocalTransactionsResponse
+		require.NoError(t, json.Unmarshal(reply.Message, &resp))
+		require.Empty(t, resp.Error)
+		require.Len(t, resp.Transactions, 2)
+
+		// same filter but with status unpaid should be only one
+		msg, err = actor.Message(
+			sActor.Handle(),
+			node.actor.Handle(),
+			behaviors.ContractListLocalTransactionsBehavior,
+			contracts.ContractListLocalTransactionsRequest{
+				Blockchain:  "ethereum",
+				FromAddress: "0xREQ1",
+				Status:      []string{"unpaid"}, // expecting 1 records with eth+req1+unpaid
+			},
+			actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
+		)
+		require.NoError(t, err)
+
+		replyChan, err = sActor.Invoke(msg)
+		require.NoError(t, err)
+
+		reply = <-replyChan
+		defer reply.Discard()
+
+		var nResp contracts.ContractListLocalTransactionsResponse
+		require.NoError(t, json.Unmarshal(reply.Message, &nResp))
+		require.Empty(t, nResp.Error)
+		require.Len(t, nResp.Transactions, 1)
+	})
+}
+
+func TestMatchesTransactionAddressFilters(t *testing.T) {
+	t.Parallel()
+
+	tx := &transaction.Transaction{
+		ToAddress: []types.PaymentAddressInfo{
+			{
+				Blockchain:    "Ethereum",
+				RequesterAddr: "0xREQ111",
+				ProviderAddr:  "0xPROV111",
+			},
+			{
+				Blockchain:    "Polygon",
+				RequesterAddr: "0xREQ222",
+				ProviderAddr:  "0xPROV222",
+			},
+		},
+	}
+
+	t.Run("single blockchain filter matches regardless of addresses", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, matchesTransactionAddressFilters(tx, contracts.ContractListLocalTransactionsRequest{
+			Blockchain: "polygon",
+		}))
+	})
+
+	t.Run("multiple filters are ANDed across provided params", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, matchesTransactionAddressFilters(tx, contracts.ContractListLocalTransactionsRequest{
+			Blockchain:  "ethereum",
+			FromAddress: "0xREQ111",
+		}))
+	})
+
+	t.Run("fail when one param is missing", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, matchesTransactionAddressFilters(tx, contracts.ContractListLocalTransactionsRequest{
+			Blockchain:  "ethereum",
+			FromAddress: "0xREQ999",
+		}))
+	})
+
+	t.Run("AND allows values to come from different address entries", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, matchesTransactionAddressFilters(tx, contracts.ContractListLocalTransactionsRequest{
+			Blockchain:  "ethereum",
+			FromAddress: "0xREQ222",
+		}))
+	})
+}
 
 func TestHandleListIncomingContractsAggregatesRemoteHosts(t *testing.T) {
 	t.Skip()

@@ -1036,16 +1036,30 @@ func DeploymentRestorationProviderPostReboot(suite *TestSuite) {
 }
 
 // DeploymentRestorationFromProvisioning tests restoration when crash occurs at Provisioning
+// XXX this test is not very reliable. it ends up being skipped on most runs because catching the
+// provisioning status is difficult. Even if it was caught, between the time the status was seen
+// and the time the node is killed, it most likely reaches a running state. It's kept because it's
+// important but we definitely need a better way to test this scenario.
 func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 	suite.Run("DeploymentRestorationFromProvisioning", func() {
 		suite.Require().Len(suite.nodes, 2)
 		deployerIDX := 1
 		deployer := suite.nodes[deployerIDX]
+		runner := suite.nodes[0]
 
 		ensemblePath := filepath.Join(suite.testDataDir, "ensembles", "single-nginx.yaml")
 		deployRes := deployer.client.deploy(suite.T(), deployer.userContext, deployer.password, ensemblePath, "2m")
 		suite.Contains(deployRes, `"Status": "OK"`)
 		ensembleID := extractEnsembleID(deployRes)
+
+		cleanup := func() {
+			shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
+			suite.Contains(shutdownRes, `"Error": ""`)
+			suite.Require().Eventually(func() bool {
+				status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, ensembleID)
+				return err == nil && extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
+			}, 5*60*time.Second, 2*time.Second)
+		}
 
 		// Wait for deployment to reach Provisioning status and crash immediately
 		suite.T().Log("Waiting for deployment to reach Provisioning status...")
@@ -1073,6 +1087,7 @@ func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 		// Provisioning status can be too quick to catch. If at running status, skip the test.
 		if last != jobtypes.DeploymentStatusProvisioning.String() {
 			if last == jobtypes.DeploymentStatusRunning.String() {
+				cleanup()
 				suite.T().Skipf("deployment %s Provisioning status was not caught. Seen %v", ensembleID, seen)
 			}
 			suite.T().Fatalf("deployment %s did not reach Provisioning status within 60s (seen: %v)", ensembleID, seen)
@@ -1106,6 +1121,15 @@ func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 			suite.Contains(result, `"Status": "CONNECTED"`)
 		}
 
+		// checkc status on CP side - if running, we didn't catch the status fast enough
+		allocInfo, err := runner.client.allocationsList(runner.userContext, runner.password)
+		suite.Require().NoError(err)
+		for _, alloc := range allocInfo {
+			if alloc.Status == jobtypes.AllocationRunning.String() && types.EnsembleIDFromAllocationID(alloc.ID) == ensembleID {
+				suite.T().Skipf("deployment %s Provisioning status was not caught. Alloc Status %v", ensembleID, alloc.Status)
+			}
+		}
+
 		// After restoration, the deployment should have progressed from Provisioning to Running
 		// This is expected behavior - the orchestrator automatically continues the deployment process
 		suite.T().Log("=== PHASE 4: Checking deployment status after restoration ===")
@@ -1128,13 +1152,8 @@ func DeploymentRestorationFromProvisioning(suite *TestSuite) {
 			return cur == jobtypes.DeploymentStatusRunning.String() || cur == jobtypes.DeploymentStatusCompleted.String()
 		}, 5*60*time.Second, 5*time.Second, "deployment did not stay Running or progress to Completed after restoration")
 
-		// Cleanup
-		shutdownRes := deployer.client.shutdownDeployment(suite.T(), deployer.userContext, deployer.password, ensembleID)
-		suite.Contains(shutdownRes, `"Error": ""`)
-		suite.Require().Eventually(func() bool {
-			status, err := deployer.client.deploymentStatus(suite.T(), deployer.dmsContext, deployer.password, ensembleID)
-			return err == nil && extractStatus(status) == jobtypes.DeploymentStatusCompleted.String()
-		}, 5*60*time.Second, 2*time.Second)
+		// cleanup
+		cleanup()
 	})
 }
 

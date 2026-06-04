@@ -30,14 +30,15 @@ const (
 
 // DeploymentQuery defines query parameters for advanced deployment filtering
 type DeploymentQuery struct {
-	StatusFilter  []jtypes.DeploymentStatus
-	CreatedAfter  *time.Time
-	CreatedBefore *time.Time
-	UpdatedAfter  *time.Time
-	UpdatedBefore *time.Time
-	Limit         int
-	Offset        int
-	SortBy        string // e.g., "created_at", "-created_at"
+	OrchestratorID string
+	StatusFilter   []jtypes.DeploymentStatus
+	CreatedAfter   *time.Time
+	CreatedBefore  *time.Time
+	UpdatedAfter   *time.Time
+	UpdatedBefore  *time.Time
+	Limit          int
+	Offset         int
+	SortBy         string // e.g., "created_at", "-created_at"
 }
 
 // DeploymentStore defines the interface for persisting orchestrator deployments
@@ -222,6 +223,13 @@ func (s *cloverDeploymentStore) Query(q DeploymentQuery) ([]*jtypes.Orchestrator
 	// This ensures all conditions are properly combined as AND conditions
 	var combinedCondition query.Criteria
 	hasCondition := false
+
+	// Orchestrator ID filter
+	if q.OrchestratorID != "" {
+		idCondition := query.Field("orchestrator_id").Eq(q.OrchestratorID)
+		combinedCondition = idCondition
+		hasCondition = true
+	}
 
 	// Status filter
 	if len(q.StatusFilter) > 0 {
