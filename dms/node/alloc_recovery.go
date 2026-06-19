@@ -21,6 +21,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
+	containerdexecutor "gitlab.com/nunet/device-management-service/executor/containerd"
 	dockerexecutor "gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/observability"
@@ -391,15 +392,6 @@ func (n *Node) rmUnrecoveredExec(ap jobtypes.AllocationsStatePersist) {
 			execType = types.ExecutorTypeDocker.String()
 		}
 
-		if execType != types.ExecutorTypeDocker.String() {
-			log.Warnw("terminate_unrecoverable_execution_skipped",
-				"allocationID", allocID,
-				"executionType", execType,
-				"reason", "unsupported executor type for explicit cleanup",
-			)
-			continue
-		}
-
 		metadata, err := n.getExecutor(jobtypes.AllocationExecutor(execType))
 		if err != nil {
 			log.Warnw("terminate_unrecoverable_execution_skipped",
@@ -411,27 +403,61 @@ func (n *Node) rmUnrecoveredExec(ap jobtypes.AllocationsStatePersist) {
 			continue
 		}
 
-		dockerExec, ok := metadata.executor.(*dockerexecutor.Executor)
-		if !ok {
-			log.Warnw("terminate_unrecoverable_execution_skipped",
-				"allocationID", allocID,
-				"executionType", execType,
-				"reason", "executor is not docker backend",
-			)
-			continue
-		}
+		if execType == types.ExecutorTypeDocker.String() {
+			dockerExec, ok := metadata.executor.(*dockerexecutor.Executor)
+			if !ok {
+				log.Warnw("terminate_unrecoverable_execution_skipped",
+					"allocationID", allocID,
+					"executionType", execType,
+					"reason", "executor is not docker backend",
+				)
+				continue
+			}
 
-		ctxT, cancel := context.WithTimeout(n.ctx, 10*time.Second)
-		err = dockerExec.TerminateByJobID(ctxT, allocID, 5)
-		cancel()
+			ctxT, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+			err = dockerExec.TerminateByJobID(ctxT, allocID, 5)
+			cancel()
 
-		if err != nil {
-			log.Warnw("terminate_unrecoverable_execution_failed",
-				"allocationID", allocID,
-				"executionType", execType,
-				"error", err,
-			)
-			continue
+			if err != nil {
+				log.Warnw("terminate_unrecoverable_execution_failed",
+					"allocationID", allocID,
+					"executionType", execType,
+					"error", err,
+				)
+				continue
+			}
+		} else if execType == types.ExecutorTypeContainerd.String() {
+			containerdExec, ok := metadata.executor.(*containerdexecutor.Executor)
+			if !ok {
+				log.Warnw("terminate_unrecoverable_execution_skipped",
+					"allocationID", allocID,
+					"executionType", execType,
+					"reason", "executor is not containerd backend",
+				)
+				continue
+			}
+
+			ctxT, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+			defer cancel()
+			err = containerdExec.Cancel(ctxT, allocConf.ExecutorInfo.ExecutionID)
+			if err != nil {
+				log.Warnw("terminate_unrecoverable_execution_skipped",
+					"allocationID", allocID,
+					"executionType", execType,
+					"error", err,
+				)
+				continue
+			}
+
+			err = containerdExec.Remove(allocConf.ExecutorInfo.ExecutionID, 10*time.Second)
+			if err != nil {
+				log.Warnw("terminate_unrecoverable_execution_skipped",
+					"allocationID", allocID,
+					"executionType", execType,
+					"error", err)
+				continue
+			}
+
 		}
 
 		log.Infow("terminate_unrecoverable_execution_success",
@@ -534,7 +560,15 @@ func (n *Node) restoreAllocations(ap jobtypes.AllocationsStatePersist) error {
 		}
 
 		for _, allocPConf := range allocConf.PortMapping {
-			err := n.network.MapPort(allocConf.SubnetID, allocPConf.Protocol, allocPConf.SourceIP, allocPConf.SourcePort, allocPConf.DestIP, allocPConf.DestPort)
+			err := n.network.MapPort(types.MapPortRequest{
+				SubnetID:      allocConf.SubnetID,
+				Protocol:      allocPConf.Protocol,
+				ExecutionPort: allocPConf.SourcePort,
+				SubnetIP:      allocPConf.DestIP,
+				SubnetPort:    allocPConf.DestPort,
+				ExecutorType:  types.ExecutorType(allocConf.Execution.Type),
+				CNIBridge:     allocConf.ExecutorInfo.Net.HostBridge,
+			})
 			if err != nil {
 				restoreErr = fmt.Errorf("map ports on restore of %s: %w", ap.EnsembleID, err)
 				return restoreErr
@@ -572,6 +606,7 @@ func (n *Node) restoreAllocations(ap jobtypes.AllocationsStatePersist) error {
 			ap.Allocations[allocID].DNSRecords,
 			ap.Allocations[allocID].PortMapping,
 		)
+		alloc.ApplyPersistedExecutorInfo(ap.Allocations[allocID].ExecutorInfo)
 
 		err = alloc.Run(n.ctx, ap.Allocations[allocID].NetState.SubnetIP, ap.Allocations[allocID].NetState.GatewayIP, ap.Allocations[allocID].NetState.PortMapping)
 		if err != nil {

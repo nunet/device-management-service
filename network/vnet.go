@@ -405,9 +405,9 @@ func (*MemoryHost) RemoveSubnetPeers(string, map[string]string) error { return n
 
 func (*MemoryHost) AcceptSubnetPeers(string, map[string]string) error { return nil }
 
-func (*MemoryHost) MapPort(string, string, string, string, string, string) error { return nil }
+func (*MemoryHost) MapPort(types.MapPortRequest) error { return nil }
 
-func (*MemoryHost) UnmapPort(string, string, string, string, string, string) error { return nil }
+func (*MemoryHost) UnmapPort(types.MapPortRequest) error { return nil }
 
 func (*MemoryHost) AddSubnetDNSRecords(string, map[string]string) error { return nil }
 

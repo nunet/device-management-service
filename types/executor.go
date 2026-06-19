@@ -12,6 +12,7 @@ import (
 	"context"
 	"io"
 	"reflect"
+	"strings"
 	"time"
 )
 
@@ -81,6 +82,12 @@ type Executor interface {
 
 	// Stats returns the resource usage stats for a container. errors if the execution is not found or stats cannot be retrieved.
 	Stats(ctx context.Context, executionID string) (*ExecutorStats, error)
+
+	// GetInfo returns basic execution metadata from the runtime provider.
+	GetInfo(ctx context.Context, executionID string) (*ExecutorInfo, error)
+
+	// GetNetInfo returns network details for an execution (interface, addressing, port mappings).
+	GetNetInfo(ctx context.Context, executionID string) (*ExecutorNetInfo, error)
 }
 
 // ExecutorType is the type of the executor
@@ -88,6 +95,7 @@ type ExecutorType string
 
 const (
 	ExecutorTypeDocker      ExecutorType = "docker"
+	ExecutorTypeContainerd  ExecutorType = "containerd"
 	ExecutorTypeFirecracker ExecutorType = "firecracker"
 	ExecutorTypeWasm        ExecutorType = "wasm"
 
@@ -100,6 +108,11 @@ var _ Comparable[ExecutorType] = (*ExecutorType)(nil)
 // Compare compares two ExecutorType objects
 func (e ExecutorType) Compare(other ExecutorType) (Comparison, error) {
 	return LiteralComparator(string(e), string(other)), nil
+}
+
+// Equal performs a simple string equality check
+func (e ExecutorType) Equal(other string) bool {
+	return strings.EqualFold(e.String(), other)
 }
 
 // String returns the string representation of the ExecutorType
@@ -115,6 +128,33 @@ var (
 	_ Comparable[Executors] = (*Executors)(nil)
 	_ Calculable[Executors] = (*Executors)(nil)
 )
+
+// ExecutorMappedPort describes a host-to-sandbox port mapping.
+type ExecutorMappedPort struct {
+	HostIP       string `json:"host_ip,omitempty"`
+	HostPort     int    `json:"host_port"`
+	ExecutorPort int    `json:"executor_port"`
+	Protocol     string `json:"protocol,omitempty"`
+}
+
+// ExecutorNetInfo holds network details for a running execution.
+type ExecutorNetInfo struct {
+	InterfaceName string               `json:"interface_name,omitempty"`
+	HostBridge    string               `json:"host_bridge,omitempty"` // host-side bridge (containerd CNI)
+	IPAddress     string               `json:"ip_address,omitempty"`
+	CIDR          string               `json:"cidr,omitempty"`
+	MappedPorts   []ExecutorMappedPort `json:"mapped_ports,omitempty"`
+}
+
+// ExecutorInfo holds basic runtime metadata for an execution.
+type ExecutorInfo struct {
+	ExecutionID string          `json:"execution_id"`
+	ContainerID string          `json:"container_id,omitempty"`
+	Image       string          `json:"image,omitempty"`
+	Runtime     ExecutorType    `json:"runtime,omitempty"`
+	Status      ExecutionStatus `json:"status,omitempty"`
+	Net         ExecutorNetInfo `json:"net,omitempty"`
+}
 
 // ExecutorStats represents resource usage stats for an executor.
 type ExecutorStats struct {

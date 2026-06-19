@@ -11,6 +11,7 @@ package jobs
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/executor/null"
 	"gitlab.com/nunet/device-management-service/network"
+	"gitlab.com/nunet/device-management-service/storage/volume"
 	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/types"
 )
@@ -169,6 +171,28 @@ func TestAllocation_Run(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, AllocationRunning, alloc.status)
 		require.NotEmpty(t, alloc.resultsDir)
+	})
+
+	t.Run("success with local volume creates host path under workdir", func(t *testing.T) {
+		t.Parallel()
+
+		localVolume := types.VolumeConfig{
+			Type:             "local",
+			Src:              "my-data",
+			MountDestination: "/data",
+		}
+
+		alloc, err := createTestAllocation(t, localVolume)
+		require.NoError(t, err)
+
+		err = alloc.Run(context.Background(), "", "", nil)
+		require.NoError(t, err)
+
+		hostPath := volume.HostPath("/tmp/workdir", alloc.orchestrator.Address.HostID, localVolume)
+		info, err := alloc.fs.Stat(hostPath)
+		require.NoError(t, err)
+		require.True(t, info.IsDir())
+		require.Equal(t, filepath.Join("/tmp/workdir", "volumes", alloc.orchestrator.Address.HostID, "my-data"), hostPath)
 	})
 }
 
@@ -580,6 +604,15 @@ func TestAllocation_PersistState(t *testing.T) {
 				},
 			},
 		)
+		alloc.ApplyPersistedExecutorInfo(types.ExecutorInfo{
+			ExecutionID: alloc.executionID,
+			Runtime:     types.ExecutorTypeDocker,
+			Net: types.ExecutorNetInfo{
+				InterfaceName: "bridge",
+				IPAddress:     "172.17.0.2",
+				CIDR:          "172.17.0.2/16",
+			},
+		})
 
 		state := alloc.PersistState()
 		require.Equal(t, alloc.ID, state.AllocationID)
@@ -592,6 +625,8 @@ func TestAllocation_PersistState(t *testing.T) {
 		require.Equal(t, "10.0.0.10", state.DNSRecords["service.local"])
 		require.Len(t, state.PortMapping, 1)
 		require.Equal(t, "31000", state.PortMapping[0].SourcePort)
+		require.Equal(t, types.ExecutorTypeDocker, state.ExecutorInfo.Runtime)
+		require.Equal(t, "bridge", state.ExecutorInfo.Net.InterfaceName)
 
 		// Returned maps are copies and should not mutate allocation state.
 		state.Ports[32000] = 8080

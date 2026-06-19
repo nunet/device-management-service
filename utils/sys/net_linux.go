@@ -12,10 +12,12 @@ package sys
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"github.com/songgao/water"
 	"github.com/vishvananda/netlink"
@@ -24,6 +26,9 @@ import (
 
 // NewTunTapInterface creates a new tun/tap interface
 func NewTunTapInterface(name string, mode TunTapMode, persist bool) (NetInterface, error) {
+	// sleep for a random amount of time to avoid race conditions
+	time.Sleep(time.Duration(rand.Intn(50)) * time.Millisecond)
+
 	var intMode water.DeviceType = water.TAP
 
 	if mode == NetTunMode {
@@ -407,6 +412,40 @@ func DelForwardRule(protocol, destIP, destPort string) error {
 	return nil
 }
 
+// AddForwardCNIRule adds an iptables forward rule between cni iface and dms tun
+func AddForwardCNIRule(protocol, sourceIP, destIP, destPort, iiface, oiface string) error {
+	args := []string{
+		NuNetIptablesChain, "-t", "filter",
+		"-s", sourceIP, "-i", iiface, "-o", oiface,
+		"-p", protocol, "-d", destIP, "--dport",
+		destPort, "-j", "ACCEPT",
+	}
+	if !iptRuleExist(args...) {
+		err := iptAppendRule(args...)
+		if err != nil {
+			return fmt.Errorf("error adding forward rule: %w", err)
+		}
+	}
+	return nil
+}
+
+// DelForwardCNIRule deletes a cni - dms tun forwarding iptables rule
+func DelForwardCNIRule(protocol, sourceIP, destIP, destPort, iiface, oiface string) error {
+	args := []string{
+		NuNetIptablesChain, "-t", "filter",
+		"-s", sourceIP, "-i", iiface, "-o", oiface,
+		"-p", protocol, "-d", destIP, "--dport",
+		destPort, "-j", "ACCEPT",
+	}
+	if iptRuleExist(args...) {
+		err := iptDeleteRule(args...)
+		if err != nil {
+			return fmt.Errorf("error deleting cni forward rule: %w", err)
+		}
+	}
+	return nil
+}
+
 // AddOutputNatRule adds an iptable DNAT rule to OUTPUT chain nat table to redirect
 // the locally originating packets not included in the prerouting chain
 // takes the iface name to restrict the rule to the specified interface (normally loopback)
@@ -567,4 +606,23 @@ func iptables(args []string) (string, error) {
 		return string(output), fmt.Errorf("failed to execute command: iptables %q: %w", args, err)
 	}
 	return string(output), nil
+}
+
+func IPToCIDR(ipStr string, prefixLen int) (string, error) {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return "", fmt.Errorf("invalid IP address: %s", ipStr)
+	}
+
+	// Determine address family (IPv4 or IPv6)
+	bits := 32
+	if ip.To4() == nil {
+		bits = 128
+	}
+
+	// Create the network mask and apply it
+	mask := net.CIDRMask(prefixLen, bits)
+	network := ip.Mask(mask)
+
+	return fmt.Sprintf("%s/%d", network.String(), prefixLen), nil
 }

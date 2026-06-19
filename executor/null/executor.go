@@ -103,3 +103,11 @@ func (e *Executor) WaitForStatus(_ context.Context, _ string, _ types.ExecutionS
 func (e *Executor) Stats(_ context.Context, _ string) (*types.ExecutorStats, error) {
 	return nil, fmt.Errorf("stats not available for null executor")
 }
+
+func (e *Executor) GetInfo(_ context.Context, executionID string) (*types.ExecutorInfo, error) {
+	return &types.ExecutorInfo{ExecutionID: executionID}, nil
+}
+
+func (e *Executor) GetNetInfo(_ context.Context, _ string) (*types.ExecutorNetInfo, error) {
+	return &types.ExecutorNetInfo{}, nil
+}

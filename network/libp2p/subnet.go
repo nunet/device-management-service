@@ -33,8 +33,19 @@ import (
 	"github.com/google/gopacket/layers"
 	peer "github.com/libp2p/go-libp2p/core/peer"
 
+	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils/sys"
 )
+
+type portMapEntry struct {
+	subnetPort   string
+	execPort     string
+	subnetIP     string
+	protocol     string
+	executorType types.ExecutorType
+	cniBridge    string
+	tunIface     string
+}
 
 const (
 	IfaceMTU      = 1280 // sticking to quic limit for now
@@ -71,11 +82,7 @@ type subnet struct {
 	}
 
 	portMappingMx sync.Mutex
-	portMapping   map[string]*struct {
-		destPort string
-		destIP   string
-		srcIP    string
-	}
+	portMapping   map[string]*portMapEntry // key: mapped/published port - the port that is accessible
 
 	locks        map[string]*sync.Mutex
 	packetQueues map[string]chan []byte
@@ -105,12 +112,8 @@ func newSubnet(ctx context.Context, l *Libp2p, factory NetInterfaceFactory) *sub
 		}{
 			conns: map[string]*connectip.Conn{},
 		},
-		dnsRecords: map[string]string{},
-		portMapping: map[string]*struct {
-			destPort string
-			destIP   string
-			srcIP    string
-		}{},
+		dnsRecords:   map[string]string{},
+		portMapping:  map[string]*portMapEntry{},
 		locks:        make(map[string]*sync.Mutex),
 		packetQueues: make(map[string]chan []byte),
 		ifaceFactory: factory,
@@ -196,11 +199,7 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 
 	// Create snapshot of port mappings to avoid holding lock during cleanup
 	s.portMappingMx.Lock()
-	mappingsSnapshot := make(map[string]*struct {
-		destPort string
-		destIP   string
-		srcIP    string
-	})
+	mappingsSnapshot := make(map[string]*portMapEntry)
 	for k, v := range s.portMapping {
 		mappingsSnapshot[k] = v
 	}
@@ -208,7 +207,15 @@ func (l *Libp2p) DestroySubnet(subnetID string) error {
 
 	// Now iterate over snapshot
 	for sourcePort, mapping := range mappingsSnapshot {
-		err := l.UnmapPort(subnetID, "tcp", mapping.srcIP, sourcePort, mapping.destIP, mapping.destPort)
+		err := l.UnmapPort(types.MapPortRequest{
+			SubnetID:      subnetID,
+			Protocol:      mapping.protocol,
+			ExecutionPort: mapping.execPort,
+			SubnetIP:      mapping.subnetIP,
+			SubnetPort:    mapping.subnetPort,
+			ExecutorType:  mapping.executorType,
+			CNIBridge:     mapping.cniBridge,
+		})
 		if err != nil {
 			log.Errorf("failed to unmap port %s: %v", sourcePort, err)
 		}

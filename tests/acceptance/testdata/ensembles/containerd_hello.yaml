@@ -1,0 +1,24 @@
+version: "V1"
+
+allocations:
+    alloc1:
+        type: task
+        executor: containerd
+        resources:
+            cpu:
+                cores: 1
+            gpus: []
+            ram:
+                size: 1 # in GiB
+            disk:
+                size: 1 # in GiB
+        execution:
+            type: containerd
+            image: docker.io/library/busybox:latest
+            cmd: ["echo", "Hello from containerd!"]
+        failure_recovery: stay_down
+nodes:
+    node1:
+        allocations:
+            - alloc1
+        failure_recovery: stay_down

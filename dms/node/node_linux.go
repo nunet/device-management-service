@@ -14,6 +14,7 @@ import (
 	"context"
 
 	job_types "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	containerdexecutor "gitlab.com/nunet/device-management-service/executor/containerd"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 )
 
@@ -23,6 +24,14 @@ func (n *Node) initSupportedExecutors(ctx context.Context) error {
 		n.executors[string(job_types.ExecutorDocker)] = executorMetadata{
 			executor:      dockerExec,
 			executionType: job_types.ExecutorDocker,
+		}
+	}
+
+	containerdExec, err := containerdexecutor.NewExecutor(ctx, "root")
+	if err == nil {
+		n.executors[string(job_types.ExecutorContainerd)] = executorMetadata{
+			executor:      containerdExec,
+			executionType: job_types.ExecutorContainerd,
 		}
 	}
 

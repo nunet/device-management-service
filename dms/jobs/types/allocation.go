@@ -131,6 +131,7 @@ type AllocationState struct {
 	Volume           []types.VolumeConfig            `json:"volume"`
 	Contracts        map[string]types.ContractConfig `json:"contracts"`
 	NetState         AllocationNetState              `json:"net_state"`
+	ExecutorInfo     types.ExecutorInfo              `json:"executor_info,omitempty"`
 
 	Ports           map[int]int             `json:"ports"`
 	DynamicPortsNum int                     `json:"dynamic_ports_num"`

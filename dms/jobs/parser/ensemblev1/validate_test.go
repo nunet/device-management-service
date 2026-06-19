@@ -1837,70 +1837,99 @@ func TestValidateExecution(t *testing.T) {
 			errorMsg:    "invalid environment variable key format at index 0: 123KEY",
 		},
 		{
-			// Valid firecracker execution with all fields
-			name: "valid firecracker execution",
+			// Valid containerd execution with all fields
+			name: "valid containerd execution",
 			execution: map[string]any{
-				"type": "firecracker",
+				"type": "containerd",
 				"params": map[string]any{
-					"kernel_image":     "/path/to/kernel",
-					"root_file_system": "/path/to/rootfs",
-					"kernel_args":      "console=ttyS0",
-					"initrd":           "/path/to/initrd",
+					"image": "ubuntu:latest",
+					"environment": []any{
+						"KEY1=value1",
+						"KEY2=value2",
+						"_TEST=value3",
+					},
+					"working_directory": "/app",
+					"entrypoint": []any{
+						"sh",
+						"-c",
+					},
+					"cmd": []any{
+						"echo",
+						"hello",
+					},
+					"runtime": "runc",
 				},
 			},
 			expectError: false,
 		},
 		{
-			// Firecracker missing kernel image
-			name: "firecracker missing kernel image",
+			name: "containerd missing image",
 			execution: map[string]any{
-				"type": "firecracker",
-				"params": map[string]any{
-					"root_file_system": "/path/to/rootfs",
-				},
+				"type":   "containerd",
+				"params": map[string]any{},
 			},
 			expectError: true,
-			errorMsg:    "firecracker execution must have a kernel_image",
+			errorMsg:    "containerd execution must have an image",
 		},
 		{
-			// Firecracker missing root file system
-			name: "firecracker missing root file system",
+			name: "invalid containerd image format",
 			execution: map[string]any{
-				"type": "firecracker",
+				"type": "containerd",
 				"params": map[string]any{
-					"kernel_image": "/path/to/kernel",
+					"image": "INVALID/Image/Format:tag!",
 				},
 			},
 			expectError: true,
-			errorMsg:    "firecracker execution must have a root_file_system",
+			errorMsg:    "invalid containerd image format: INVALID/Image/Format:tag!",
 		},
 		{
-			// Firecracker empty kernel args
-			name: "firecracker empty kernel args",
+			name: "containerd invalid environment variable format",
 			execution: map[string]any{
-				"type": "firecracker",
+				"type": "containerd",
 				"params": map[string]any{
-					"kernel_image":     "/path/to/kernel",
-					"root_file_system": "/path/to/rootfs",
-					"kernel_args":      "",
+					"image": "ubuntu:latest",
+					"environment": []any{
+						"invalid_format",
+					},
 				},
 			},
 			expectError: true,
-			errorMsg:    "firecracker kernel_args cannot be empty if specified",
+			errorMsg:    "containerd environment variable at index 0 must be in KEY=VALUE format",
 		},
 		{
-			// Firecracker empty initrd
-			name: "firecracker empty initrd",
+			name: "containerd invalid runtime",
 			execution: map[string]any{
-				"type": "firecracker",
+				"type": "containerd",
 				"params": map[string]any{
-					"kernel_image":     "/path/to/kernel",
-					"root_file_system": "/path/to/rootfs",
-					"initrd":           "",
+					"image":   "ubuntu:latest",
+					"runtime": "not_a_runtime",
 				},
 			},
 			expectError: true,
-			errorMsg:    "firecracker initrd cannot be empty if specified",
+			errorMsg:    "invalid containerd runtime: definitely-not-a-runtime",
+		},
+		{
+			name: "containerd empty runtime",
+			execution: map[string]any{
+				"type": "containerd",
+				"params": map[string]any{
+					"image":   "ubuntu:latest",
+					"runtime": "",
+				},
+			},
+			expectError: true,
+			errorMsg:    "containerd runtime cannot be empty if specified",
+		},
+		{
+			name: "valid containerd runtime full name",
+			execution: map[string]any{
+				"type": "containerd",
+				"params": map[string]any{
+					"image":   "ubuntu:latest",
+					"runtime": "io.containerd.runc.v2",
+				},
+			},
+			expectError: false,
 		},
 	}
 
@@ -2440,13 +2469,14 @@ func TestNewEnsembleV1Validator(t *testing.T) {
 						},
 						"alloc2": map[string]any{
 							"type":     "service",
-							"executor": "firecracker",
+							"executor": "containerd",
 							"execution": map[string]any{
-								"type": "firecracker",
+								"type": "containerd",
 								"params": map[string]any{
-									"kernel_image":     "vmlinux",
-									"kernel_args":      "console=ttyS0",
-									"root_file_system": "rootfs.ext4",
+									"image": "docker.io/library/ubuntu:24.04",
+									"env": map[string]string{
+										"KEY1": "value1",
+									},
 								},
 							},
 							"resources": map[string]any{
