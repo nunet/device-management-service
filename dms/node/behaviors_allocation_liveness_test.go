@@ -260,6 +260,14 @@ func (m *mockExecutor) Stats(_ context.Context, _ string) (*types.ExecutorStats,
 	return nil, nil
 }
 
+func (m *mockExecutor) GetInfo(_ context.Context, executionID string) (*types.ExecutorInfo, error) {
+	return &types.ExecutorInfo{ExecutionID: executionID}, nil
+}
+
+func (m *mockExecutor) GetNetInfo(_ context.Context, _ string) (*types.ExecutorNetInfo, error) {
+	return &types.ExecutorNetInfo{}, nil
+}
+
 // XXX these tests below aren't testing anything. - revise
 
 // TestServiceAllocationSendsLivenessHeartbeats tests that service allocations

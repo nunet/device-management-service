@@ -34,6 +34,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/types"
 	sys "gitlab.com/nunet/device-management-service/utils/sys"
 )
 
@@ -121,7 +122,11 @@ func TestSubnetMapUnmapPorts(t *testing.T) {
 	err = peer1.CreateSubnet("subnet1", "10.0.0.0/24", map[string]string{})
 	require.NoError(t, err)
 
-	err = peer1.MapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "8888")
+	err = peer1.MapPort(types.MapPortRequest{
+		SubnetID: "subnet1", Protocol: "tcp",
+		ExecutionPort: "8080", SubnetIP: "10.0.0.1",
+		SubnetPort: "8888",
+	})
 	require.NoError(t, err)
 
 	cmd := exec.Command("sh", "-c", "iptables -t nat -L PREROUTING -v -n")
@@ -141,14 +146,21 @@ func TestSubnetMapUnmapPorts(t *testing.T) {
 	assert.True(t, strings.Contains(string(op), "0.0.0.0/0"))
 
 	assert.Equal(t, 1, len(peer1.subnets["subnet1"].portMapping))
-	assert.Equal(t, "8888", peer1.subnets["subnet1"].portMapping["8080"].destPort)
-	assert.Equal(t, "10.0.0.1", peer1.subnets["subnet1"].portMapping["8080"].destIP)
-	assert.Equal(t, "0.0.0.0", peer1.subnets["subnet1"].portMapping["8080"].srcIP)
+	assert.Equal(t, "8888", peer1.subnets["subnet1"].portMapping["8080"].execPort)
+	assert.Equal(t, "10.0.0.1", peer1.subnets["subnet1"].portMapping["8080"].subnetIP)
 
-	err = peer1.UnmapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "9999")
+	err = peer1.UnmapPort(types.MapPortRequest{
+		SubnetID: "subnet1", Protocol: "tcp",
+		ExecutionPort: "8080", SubnetIP: "10.0.0.1",
+		SubnetPort: "9999",
+	})
 	require.Error(t, err, "is not mapped to")
 
-	err = peer1.UnmapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "8888")
+	err = peer1.UnmapPort(types.MapPortRequest{
+		SubnetID: "subnet1", Protocol: "tcp",
+		ExecutionPort: "8080", SubnetIP: "10.0.0.1",
+		SubnetPort: "8888",
+	})
 	require.NoError(t, err)
 
 	// port := "8080"
@@ -252,7 +264,11 @@ func TestSubnetDestroy(t *testing.T) {
 	err = peer1.AddSubnetDNSRecords("subnet1", map[string]string{"example.com.": "10.20.30.40"})
 	require.NoError(t, err)
 
-	err = peer1.MapPort("subnet1", "tcp", "0.0.0.0", "8080", "10.0.0.1", "8888")
+	err = peer1.MapPort(types.MapPortRequest{
+		SubnetID: "subnet1", Protocol: "tcp",
+		ExecutionPort: "8080", SubnetIP: "10.0.0.1",
+		SubnetPort: "8888",
+	})
 	require.NoError(t, err)
 
 	err = peer1.DestroySubnet("subnet1")

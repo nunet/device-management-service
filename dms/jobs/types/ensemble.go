@@ -23,9 +23,9 @@ type (
 
 const (
 	// Executor types define the runtime environment for allocations
-	ExecutorFirecracker AllocationExecutor = "firecracker" // Firecracker VM-based execution
-	ExecutorDocker      AllocationExecutor = "docker"      // Docker container-based execution
-	ExecutorNull        AllocationExecutor = "null"        // Null executor for testing
+	ExecutorDocker     AllocationExecutor = "docker"     // Docker container-based execution
+	ExecutorContainerd AllocationExecutor = "containerd" // Containerd runtime-based execution
+	ExecutorNull       AllocationExecutor = "null"       // Null executor for testing
 
 	// AllocationType defines the lifecycle behavior of the allocation
 	AllocationTypeService AllocationType = "service" // Long-running process that should restart on failure

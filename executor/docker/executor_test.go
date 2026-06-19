@@ -586,3 +586,38 @@ func (s *ExecutorTestSuite) TestGetStatus() {
 		s.NoError(err)
 	}
 }
+
+// func TestNetInfoFromInspect(t *testing.T) {
+// 	t.Parallel()
+
+// 	port, err := nat.NewPort("tcp", "3000")
+// 	require.NoError(t, err)
+
+// 	inspect := dockertypes.ContainerJSON{
+// 		NetworkSettings: &dockertypes.NetworkSettings{
+// 			NetworkSettingsBase: dockertypes.NetworkSettingsBase{
+// 				Ports: nat.PortMap{
+// 					port: []nat.PortBinding{
+// 						{HostIP: "127.0.0.1", HostPort: "8080"},
+// 					},
+// 				},
+// 			},
+// 			Networks: map[string]*networktypes.EndpointSettings{
+// 				"bridge": {
+// 					IPAddress:   "172.17.0.2",
+// 					IPPrefixLen: 16,
+// 				},
+// 			},
+// 		},
+// 	}
+
+// 	info := netInfoFromInspect(inspect)
+// 	require.Equal(t, "bridge", info.InterfaceName)
+// 	require.Equal(t, "172.17.0.2", info.IPAddress)
+// 	require.Equal(t, "172.17.0.2/16", info.CIDR)
+// 	require.Len(t, info.MappedPorts, 1)
+// 	require.Equal(t, "127.0.0.1", info.MappedPorts[0].HostIP)
+// 	require.Equal(t, 8080, info.MappedPorts[0].HostPort)
+// 	require.Equal(t, 3000, info.MappedPorts[0].ExecutorPort)
+// 	require.Equal(t, "tcp", info.MappedPorts[0].Protocol)
+// }

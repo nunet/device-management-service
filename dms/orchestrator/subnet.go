@@ -469,7 +469,7 @@ func (p *Provisioner) mapPorts(manifestID string, subReqs []subnetRequest) error
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, len(subReqs))
 	for _, req := range subReqs {
-		for pubPort := range req.ports {
+		for pubPort, privPort := range req.ports {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -481,7 +481,7 @@ func (p *Provisioner) mapPorts(manifestID string, subReqs []subnetRequest) error
 						SubnetID:   manifestID,
 						Protocol:   "TCP", // TODO: add support in AllocationManifest for protocol
 						SourceIP:   "0.0.0.0",
-						SourcePort: strconv.Itoa(pubPort),
+						SourcePort: strconv.Itoa(privPort),
 						DestIP:     req.ip,
 						DestPort:   strconv.Itoa(pubPort),
 					},

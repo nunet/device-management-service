@@ -1944,14 +1944,14 @@ func TestShutdown(t *testing.T) {
 
 func TestContainsExecutor(t *testing.T) {
 	// Test with executor in list
-	executors := []jtypes.AllocationExecutor{jtypes.ExecutorDocker, jtypes.ExecutorFirecracker, jtypes.ExecutorNull}
+	executors := []jtypes.AllocationExecutor{jtypes.ExecutorDocker, jtypes.ExecutorContainerd, jtypes.ExecutorNull}
 	assert.True(t, containsExecutor(executors, jtypes.ExecutorDocker))
-	assert.True(t, containsExecutor(executors, jtypes.ExecutorFirecracker))
+	assert.True(t, containsExecutor(executors, jtypes.ExecutorContainerd))
 	assert.True(t, containsExecutor(executors, jtypes.ExecutorNull))
 
 	// Test with executor not in list
 	assert.False(t, containsExecutor([]jtypes.AllocationExecutor{
-		jtypes.ExecutorFirecracker,
+		jtypes.ExecutorContainerd,
 		jtypes.ExecutorNull,
 	}, jtypes.ExecutorDocker))
 

@@ -6,23 +6,10 @@
 // Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-//go:build darwin
-
-//nolint:all // This is a stub file for darwin
-package libp2p
+package containerd
 
 import (
-	"fmt"
-
-	"gitlab.com/nunet/device-management-service/types"
+	logging "github.com/ipfs/go-log/v2"
 )
 
-func (l *Libp2p) MapPort(_ types.MapPortRequest) error {
-	// TODO track the port so that we can unmap it when we tear down the subnet
-	return fmt.Errorf("TODO MapPort darwin")
-}
-
-func (l *Libp2p) UnmapPort(_ types.MapPortRequest) error {
-	// TODO
-	return fmt.Errorf("TODO UnmapPort darwin")
-}
+var log = logging.Logger("containerd")

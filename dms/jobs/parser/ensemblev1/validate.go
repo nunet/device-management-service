@@ -34,6 +34,8 @@ var (
 	validEscalationStrategies        = [...]string{"redeploy", "teardown"}
 	validAllocationFailureStrategies = [...]string{"stay_down", "one_for_one", "one_for_all", "rest_for_one"}
 	validNodeFailureStrategies       = [...]string{"stay_down", "restart", "redeploy"}
+
+	containerdRuntimeShimNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*$`)
 )
 
 // NewEnsembleV1Validator creates a new validator for the NuNet configuration.
@@ -572,8 +574,8 @@ func ValidateExecution(_ *map[string]any, data any, _ tree.Path) error {
 		if err := validateDockerExecution(params); err != nil {
 			return err
 		}
-	case "firecracker":
-		if err := validateFirecrackerExecution(params); err != nil {
+	case "containerd":
+		if err := validateContainerdExecution(params); err != nil {
 			return err
 		}
 	case "null":
@@ -586,70 +588,71 @@ func ValidateExecution(_ *map[string]any, data any, _ tree.Path) error {
 	return nil
 }
 
-// validateDockerExecution validates docker-specific execution configuration
-func validateDockerExecution(execution map[string]any) error {
-	// Validate image (required)
+// validateContainerExecutionParams validates execution params shared by docker and containerd.
+func validateContainerExecutionParams(execution map[string]any, executor string) error {
 	image, ok := execution["image"].(string)
 	if !ok || image == "" {
-		return fmt.Errorf("docker execution must have an image")
+		return fmt.Errorf("%s execution must have an image", executor)
 	}
 
-	// Validate image format with a single regex
 	if !vutils.IsDockerImageValid(image) {
-		return fmt.Errorf("invalid docker image format: %s", image)
+		return fmt.Errorf("invalid %s image format: %s", executor, image)
 	}
 
-	// Validate entrypoint if present
 	if entrypoint, ok := execution["entrypoint"].([]any); ok {
 		for i, entry := range entrypoint {
 			if _, ok := entry.(string); !ok {
-				return fmt.Errorf("docker entrypoint at index %d must be a string", i)
+				return fmt.Errorf("%s entrypoint at index %d must be a string", executor, i)
 			}
 		}
 	}
 
-	// Validate command if present
 	if cmd, ok := execution["cmd"].([]any); ok {
 		for i, c := range cmd {
 			if _, ok := c.(string); !ok {
-				return fmt.Errorf("docker command at index %d must be a string", i)
+				return fmt.Errorf("%s command at index %d must be a string", executor, i)
 			}
 		}
 	}
 
-	// Validate environment variables if present
 	if envs, ok := execution["environment"]; ok {
 		v := reflect.ValueOf(envs)
 		if v.Kind() != reflect.Slice {
-			return fmt.Errorf("docker environment must be a slice")
+			return fmt.Errorf("%s environment must be a slice", executor)
 		}
 
 		for i := range v.Len() {
 			envStr, ok := v.Index(i).Interface().(string)
 			if !ok {
-				return fmt.Errorf("docker environment variable at index %d must be a string", i)
+				return fmt.Errorf("%s environment variable at index %d must be a string", executor, i)
 			}
 			if envStr == "" {
-				return fmt.Errorf("docker environment variable at index %d cannot be empty", i)
+				return fmt.Errorf("%s environment variable at index %d cannot be empty", executor, i)
 			}
-			// Verify format is KEY=VALUE
 			if !strings.Contains(envStr, "=") {
-				return fmt.Errorf("docker environment variable at index %d must be in KEY=VALUE format", i)
+				return fmt.Errorf("%s environment variable at index %d must be in KEY=VALUE format", executor, i)
 			}
 			parts := strings.SplitN(envStr, "=", 2)
 			if parts[0] == "" {
-				return fmt.Errorf("docker environment variable key at index %d cannot be empty", i)
+				return fmt.Errorf("%s environment variable key at index %d cannot be empty", executor, i)
 			}
-			// Validate environment variable key format
 			if !vutils.IsEnvVarKeyValid(parts[0]) {
 				return fmt.Errorf("invalid environment variable key format at index %d: %s", i, parts[0])
 			}
 		}
 	}
 
-	// Validate working directory if present
 	if workDir, ok := execution["working_directory"].(string); ok && workDir == "" {
-		return fmt.Errorf("docker working directory cannot be empty if specified")
+		return fmt.Errorf("%s working directory cannot be empty if specified", executor)
+	}
+
+	return nil
+}
+
+// validateDockerExecution validates docker-specific execution configuration
+func validateDockerExecution(execution map[string]any) error {
+	if err := validateContainerExecutionParams(execution, "docker"); err != nil {
+		return err
 	}
 
 	if restartPolicy, ok := execution["restart_policy"].(string); ok {
@@ -669,31 +672,37 @@ func validateDockerExecution(execution map[string]any) error {
 	return nil
 }
 
-// validateFirecrackerExecution validates firecracker-specific execution configuration
-func validateFirecrackerExecution(execution map[string]any) error {
-	// Validate kernel image (required)
-	kernelImage, ok := execution["kernel_image"].(string)
-	if !ok || kernelImage == "" {
-		return fmt.Errorf("firecracker execution must have a kernel_image")
+// validateContainerdExecution validates containerd-specific execution configuration
+func validateContainerdExecution(execution map[string]any) error {
+	if err := validateContainerExecutionParams(execution, "containerd"); err != nil {
+		return err
 	}
 
-	// Validate root file system (required)
-	rootFS, ok := execution["root_file_system"].(string)
-	if !ok || rootFS == "" {
-		return fmt.Errorf("firecracker execution must have a root_file_system")
-	}
-
-	// Validate kernel args if present
-	if kernelArgs, ok := execution["kernel_args"].(string); ok && kernelArgs == "" {
-		return fmt.Errorf("firecracker kernel_args cannot be empty if specified")
-	}
-
-	// Validate initrd if present
-	if initrd, ok := execution["initrd"].(string); ok && initrd == "" {
-		return fmt.Errorf("firecracker initrd cannot be empty if specified")
+	if runtime, ok := execution["runtime"].(string); ok {
+		if runtime == "" {
+			return fmt.Errorf("containerd runtime cannot be empty if specified")
+		}
+		if !isValidContainerdRuntime(runtime) {
+			return fmt.Errorf("invalid containerd runtime: %s", runtime)
+		}
 	}
 
 	return nil
+}
+
+func isValidContainerdRuntime(runtime string) bool {
+	runtime = strings.TrimSpace(strings.ToLower(runtime))
+	switch runtime {
+	case "runc", "kata", "io.containerd.runc.v2", "io.containerd.kata.v2":
+		return true
+	default:
+		if !strings.HasPrefix(runtime, "io.containerd.") || !strings.HasSuffix(runtime, ".v2") {
+			return false
+		}
+		shimName := strings.TrimPrefix(runtime, "io.containerd.")
+		shimName = strings.TrimSuffix(shimName, ".v2")
+		return shimName != "" && containerdRuntimeShimNamePattern.MatchString(shimName)
+	}
 }
 
 // ValidateSupervisor checks the supervisor configuration.

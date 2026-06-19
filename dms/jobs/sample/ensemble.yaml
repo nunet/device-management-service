@@ -119,14 +119,15 @@ allocations:
     depends_on: ["worker1"]
   vm1:
     type: "service"
-    executor: "firecracker"
+    executor: "containerd"
     dns_name: "vm1.local"
     resources: "standard2" # Reference to resource template
     execution:
-      type: "firecracker"
-      kernel_image: "vmlinux-5.10"
-      root_file_system: "ubuntu-22.04.ext4"
-      kernel_args: "console=ttyS0 reboot=k panic=1"
+      type: "containerd"
+      image: "docker.io/library/ubuntu:22.04"
+      entrypoint: ["/bin/bash"]
+      cmd: ["-c", "echo 'Hello from vm1'"]
+      working_directory: "/app"
     provision:
       - "setup" # Reference to script in scripts section
       - "cleanup" # Reference to script in scripts section

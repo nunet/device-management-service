@@ -15,5 +15,6 @@ Feature: Deployment
     Then "Alice" ensemble should return <output>
 
   Examples:
-    | ensemble            | output               |
-    | "docker_hello.yaml" | "Hello from Docker!" |
+    | ensemble                | output                   |
+    | "docker_hello.yaml"     | "Hello from Docker!"     |
+    | "containerd_hello.yaml" | "Hello from containerd!" |

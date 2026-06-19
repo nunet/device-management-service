@@ -45,6 +45,19 @@ type PortsToBind struct {
 	ExecutorPort int
 }
 
+// MapPortRequest describes a subnet port mapping and the executor runtime that owns it
+type MapPortRequest struct {
+	SubnetID      string
+	Protocol      string
+	ExecutionPort string // port on the execution container/vm
+	SubnetIP      string // IP address on the subnet
+	SubnetPort    string // mapped/published port on the subnet
+
+	ExecutorType ExecutorType
+	// CNIBridge is the host-side CNI bridge interface (containerd only)
+	CNIBridge string
+}
+
 // ExecutionListItem is the result of the current executions.
 type ExecutionListItem struct {
 	ExecutionID string // ID of the execution

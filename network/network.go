@@ -133,10 +133,10 @@ type Network interface {
 	AcceptSubnetPeers(subnetID string, partialRoutingTable map[string]string) error
 
 	// MapPort maps a sourceIp:sourcePort to destIP:destPort
-	MapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error
+	MapPort(req types.MapPortRequest) error
 
 	// UnmapPort removes a previous port map
-	UnmapPort(subnetID, protocol, sourceIP, sourcePort, destIP, destPort string) error
+	UnmapPort(req types.MapPortRequest) error
 
 	// AddSubnetDNSRecords adds dns records to our local resolver
 	AddSubnetDNSRecords(subnetID string, records map[string]string) error

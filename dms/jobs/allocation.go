@@ -27,6 +27,7 @@ import (
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/network"
 	"gitlab.com/nunet/device-management-service/observability"
+	"gitlab.com/nunet/device-management-service/storage/volume"
 	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/types"
@@ -101,6 +102,7 @@ type Allocation struct {
 	DeploymentID       string
 	orchestrator       actor.Handle
 	executor           types.Executor
+	executorInfo       types.ExecutorInfo
 	executionID        string
 	Job                Job
 	network            network.Network
@@ -352,6 +354,20 @@ func (a *Allocation) removeDNSRecords(domains []string) {
 	}
 }
 
+// ExecutorInfo returns the last known runtime metadata for this allocation's execution.
+func (a *Allocation) ExecutorInfo() types.ExecutorInfo {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	return a.executorInfo
+}
+
+// ApplyPersistedExecutorInfo restores executor metadata captured before persistence.
+func (a *Allocation) ApplyPersistedExecutorInfo(info types.ExecutorInfo) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	a.executorInfo = info
+}
+
 // ApplyPersistedNetworkMetadata re-applies persisted network metadata originally
 // obtained via subnet events since needed during restore
 func (a *Allocation) ApplyPersistedNetworkMetadata(
@@ -406,6 +422,7 @@ func (a *Allocation) PersistState() jobtypes.AllocationState {
 			GatewayIP:   a.NetState.GatewayIP,
 			PortMapping: copyIntMap(a.NetState.PortMapping),
 		},
+		ExecutorInfo: a.executorInfo,
 
 		Ports:           copyIntMap(a.ports),
 		DynamicPortsNum: a.dynamicPortsNum,
@@ -482,11 +499,10 @@ func (a *Allocation) Run(
 		executionRequest.Inputs = make([]*types.StorageVolumeExecutor, 0)
 
 		for _, v := range a.Job.Volume {
-			src := ""
-			if v.Type == "glusterfs" {
-				src = filepath.Join(a.workDir, "volumes", a.ID, v.Name)
-			} else {
-				src = v.Src
+			// using orchestrtaor's peerID to allow the same orchestrator get back to the same volume
+			src := volume.HostPath(a.workDir, a.orchestrator.Address.HostID, v)
+			if err := utils.CreateDirIfNotExists(a.fs, src); err != nil {
+				return fmt.Errorf("create volume directory %s: %w", src, err)
 			}
 
 			target := v.MountDestination
@@ -570,6 +586,17 @@ func (a *Allocation) Run(
 			ContractDID:     v.DID,
 			Payload:         evt,
 		})
+	}
+
+	if info, infoErr := a.executor.GetInfo(ctx, a.executionID); infoErr != nil {
+		log.Warnw("allocation_executor_info_unavailable",
+			"labels", string(observability.LabelAllocation),
+			"allocationID", a.ID,
+			"executionID", a.executionID,
+			"error", infoErr,
+		)
+	} else if info != nil {
+		a.executorInfo = *info
 	}
 
 	// NEW: Log the resources we've assigned for this run

@@ -384,8 +384,14 @@ func TestMiscNetworkMethods(t *testing.T) {
 			map[string]string{daveID.String(): daveIP}))
 
 		// Port mapping
-		assert.NoError(t, alice.MapPort(subnetID, "tcp", aliceIP, srcPort, bobIP, dstPort))
-		assert.NoError(t, alice.UnmapPort(subnetID, "tcp", aliceIP, srcPort, "", ""))
+		assert.NoError(t, alice.MapPort(types.MapPortRequest{
+			SubnetID: subnetID, Protocol: "tcp",
+			ExecutionPort: srcPort, SubnetIP: bobIP, SubnetPort: dstPort,
+		}))
+		assert.NoError(t, alice.UnmapPort(types.MapPortRequest{
+			SubnetID: subnetID, Protocol: "tcp",
+			ExecutionPort: srcPort,
+		}))
 
 		// DNS records
 		dnsRecords := map[string]string{"alice.local": aliceIP, "bob.local": bobIP}

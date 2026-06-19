@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
@@ -942,4 +943,95 @@ func (e *Executor) TerminateByJobID(ctx context.Context, jobID string, timeoutSe
 	}
 
 	return nil
+}
+
+func (e *Executor) GetInfo(ctx context.Context, executionID string) (*types.ExecutorInfo, error) {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return nil, fmt.Errorf("execution (%s) not found", executionID)
+	}
+
+	inspect, err := e.client.InspectContainer(ctx, handler.containerID)
+	if err != nil {
+		return nil, fmt.Errorf("inspect container for execution (%s): %w", executionID, err)
+	}
+
+	status, err := handler.status(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get status for execution (%s): %w", executionID, err)
+	}
+
+	return &types.ExecutorInfo{
+		ExecutionID: executionID,
+		ContainerID: handler.containerID,
+		Image:       inspect.Config.Image,
+		Runtime:     types.ExecutorTypeDocker,
+		Status:      status,
+		Net:         netInfoFromInspect(inspect),
+	}, nil
+}
+
+func (e *Executor) GetNetInfo(ctx context.Context, executionID string) (*types.ExecutorNetInfo, error) {
+	handler, found := e.handlers.Get(executionID)
+	if !found {
+		return nil, fmt.Errorf("execution (%s) not found", executionID)
+	}
+
+	inspect, err := e.client.InspectContainer(ctx, handler.containerID)
+	if err != nil {
+		return nil, fmt.Errorf("inspect container for execution (%s): %w", executionID, err)
+	}
+
+	netInfo := netInfoFromInspect(inspect)
+	return &netInfo, nil
+}
+
+func netInfoFromInspect(in dockertypes.ContainerJSON) types.ExecutorNetInfo {
+	info := types.ExecutorNetInfo{
+		MappedPorts: mappedPortsFromInspect(in),
+	}
+
+	for name, endpoint := range in.NetworkSettings.Networks {
+		if endpoint == nil {
+			continue
+		}
+		info.InterfaceName = name
+		if endpoint.IPAddress != "" {
+			info.IPAddress = endpoint.IPAddress
+			if endpoint.IPPrefixLen > 0 {
+				info.CIDR = fmt.Sprintf("%s/%d", endpoint.IPAddress, endpoint.IPPrefixLen)
+			}
+		}
+		break
+	}
+
+	return info
+}
+
+func mappedPortsFromInspect(in dockertypes.ContainerJSON) []types.ExecutorMappedPort {
+	if len(in.NetworkSettings.Ports) == 0 {
+		return nil
+	}
+
+	mappings := make([]types.ExecutorMappedPort, 0)
+	for port, bindings := range in.NetworkSettings.Ports {
+		for _, binding := range bindings {
+			hostPort, err := strconv.Atoi(binding.HostPort)
+			if err != nil {
+				continue
+			}
+			executorPort, err := strconv.Atoi(port.Port())
+			if err != nil {
+				continue
+			}
+			mappings = append(mappings, types.ExecutorMappedPort{
+				HostIP:       binding.HostIP,
+				HostPort:     hostPort,
+				ExecutorPort: executorPort,
+				Protocol:     port.Proto(),
+			})
+		}
+	}
+
+	return mappings
 }

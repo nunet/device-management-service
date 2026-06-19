@@ -17,6 +17,7 @@ import (
 	"gitlab.com/nunet/device-management-service/actor"
 	"gitlab.com/nunet/device-management-service/dms/behaviors"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
+	"gitlab.com/nunet/device-management-service/types"
 )
 
 func (a *Allocation) handleSubnetAddPeer(msg actor.Envelope) {
@@ -93,9 +94,29 @@ func (a *Allocation) handleSubnetMapPort(msg actor.Envelope) {
 		return
 	}
 
-	err := a.network.MapPort(request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort)
+	mapReq := types.MapPortRequest{
+		SubnetID:      request.SubnetID,
+		Protocol:      request.Protocol,
+		ExecutionPort: request.SourcePort,
+		SubnetIP:      request.DestIP,
+		SubnetPort:    request.DestPort,
+		ExecutorType:  types.ExecutorType(a.Job.Execution.Type),
+		CNIBridge:     a.executorInfo.Net.HostBridge,
+	}
+
+	log.Infow("subnet_map_port_args",
+		"subnetID", mapReq.SubnetID,
+		"protocol", mapReq.Protocol,
+		"executionPort", mapReq.ExecutionPort,
+		"subnetIP", mapReq.SubnetIP,
+		"subnetPort", mapReq.SubnetPort,
+		"executorType", mapReq.ExecutorType,
+		"cniBridge", mapReq.CNIBridge,
+	)
+
+	err := a.network.MapPort(mapReq)
 	if err != nil {
-		log.Debugw("subnet_map_port_error",
+		log.Errorw("subnet_map_port_error",
 			"labels", []string{},
 			"error", err)
 		resp.Error = err.Error()
@@ -162,9 +183,15 @@ func (a *Allocation) handleSubnetUnmapPort(msg actor.Envelope) {
 		return
 	}
 
-	err := a.network.UnmapPort(
-		request.SubnetID, request.Protocol, request.SourceIP, request.SourcePort, request.DestIP, request.DestPort,
-	)
+	err := a.network.UnmapPort(types.MapPortRequest{
+		SubnetID:      request.SubnetID,
+		Protocol:      request.Protocol,
+		ExecutionPort: request.SourcePort,
+		SubnetIP:      request.DestIP,
+		SubnetPort:    request.DestPort,
+		ExecutorType:  types.ExecutorType(a.Job.Execution.Type),
+		CNIBridge:     a.executorInfo.Net.HostBridge,
+	})
 	if err != nil {
 		resp.Error = err.Error()
 		a.sendReply(msg, resp)

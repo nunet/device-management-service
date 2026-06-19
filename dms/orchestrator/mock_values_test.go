@@ -65,13 +65,13 @@ var (
 
 	Alloc3Cfg = jtypes.AllocationConfig{
 		Type:     jtypes.AllocationTypeService,
-		Executor: jtypes.ExecutorFirecracker,
+		Executor: jtypes.ExecutorContainerd,
 		DNSName:  "service2",
 	}
 
 	Alloc4Cfg = jtypes.AllocationConfig{
 		Type:     jtypes.AllocationTypeTask,
-		Executor: jtypes.ExecutorFirecracker,
+		Executor: jtypes.ExecutorContainerd,
 		DNSName:  "task2",
 	}
 

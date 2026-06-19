@@ -31,7 +31,7 @@ func init() {
 	godog.BindFlags("godog.", flag.CommandLine, &opts)
 }
 
-func TestDeployment(t *testing.T) {
+func TestDeploymentBasic(t *testing.T) {
 	o := opts
 	o.TestingT = t
 	o.Paths = []string{"features/deployment.feature"}

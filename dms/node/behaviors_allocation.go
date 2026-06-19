@@ -25,6 +25,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/jobs"
 	jobtypes "gitlab.com/nunet/device-management-service/dms/jobs/types"
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
+	containerdexecutor "gitlab.com/nunet/device-management-service/executor/containerd"
 	"gitlab.com/nunet/device-management-service/executor/docker"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
@@ -543,6 +544,13 @@ func createExecutor(ctx context.Context, fs afero.Afero, executionType string) (
 	case types.ExecutorTypeDocker.String():
 		id := uuid.New().String()
 		exec, err := docker.NewExecutor(ctx, fs, id)
+		if err != nil {
+			return nil, fmt.Errorf("create executor: %w", err)
+		}
+		return exec, nil
+	case types.ExecutorTypeContainerd.String():
+		id := uuid.New().String()
+		exec, err := containerdexecutor.NewExecutor(ctx, id)
 		if err != nil {
 			return nil, fmt.Errorf("create executor: %w", err)
 		}

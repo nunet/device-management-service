@@ -26,6 +26,7 @@
       - [Linux Installation](#linux-installation)
     - [Permissions and features (for compute providers using Linux)](#permissions-and-features-for-compute-providers-using-linux)
       - [Required: Net-admin permission and IP over libp2p](#required-net-admin-permission-and-ip-over-libp2p)
+      - [Optional: containerd executor (Linux)](#optional-containerd-executor-linux)
       - [May be required: iptables upgrade](#may-be-required-iptables-upgrade)
       - [macOS ARM64 Installation & Debugging Guide (Apple Silicon)](#macos-arm64-installation--debugging-guide-apple-silicon)
         - [Troubleshooting Build Issues](#troubleshooting-build-issues)
@@ -251,6 +252,20 @@ sudo setcap cap_net_admin,cap_sys_admin+ep /usr/bin/nunet
 ```
 
 The above command depends on: `libcap2-bin` (Debian/Ubuntu) or `libcap` (CentOS/RHEL/Arch...)
+
+#### Optional: containerd executor (Linux)
+
+The **containerd** executor is an alternative to Docker for running allocations on Linux compute nodes. It requires containerd, CNI plugins, and the same host networking permissions as above. **Run DMS as root** on compute provider DMSs that intend to use it.
+
+Minimal checklist:
+
+1. Install **containerd** and **containerd-shim-runc-v2**; ensure `/run/containerd/containerd.sock` exists.
+2. Install CNI plugins (`bridge`, `host-local`, `portmap`, `firewall`) into **`/opt/cni/bin`**.
+3. Install the CNI conflist into **`/etc/cni/net.d`** (see `maint-scripts/nunet-dms/etc/cni/net.d/`).
+4. Create **`/var/run/netns`** and enable **`net.ipv4.ip_forward=1`**.
+5. Set allocation `execution.type` to **`containerd`** in your ensemble.
+
+Full setup steps: [executor/containerd/README.md](./executor/containerd/README.md).
 
 #### May be required: iptables upgrade
 

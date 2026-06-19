@@ -36,7 +36,7 @@ Here is quick overview of the contents of this pacakge:
 
 * [docker](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/docker): This folder contains the implementation of docker executor.
 
-* [firecracker](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/firecracker): This folder contains the implementation of firecracker executor.
+* [containerd](https://gitlab.com/nunet/device-management-service/-/tree/main/executor/containerd): Linux-only containerd executor with CNI networking. See [containerd/README.md](./containerd/README.md) for host setup.
 
 ### Class Diagram
 

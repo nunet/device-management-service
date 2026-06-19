@@ -11,7 +11,6 @@ package node
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"sync"
 	"time"
@@ -547,7 +546,7 @@ func (a *allocator) mountVolumeOnHost(job jobs.Job, allocationID string) error {
 			return fmt.Errorf("create volume: %w", err)
 		}
 
-		desginationPath := filepath.Join(a.workDir, "volumes", allocationID, v.Name)
+		desginationPath := volume.HostPath(a.workDir, allocationID, v)
 		err = utils.CreateDirIfNotExists(a.fs, desginationPath)
 		if err != nil {
 			return fmt.Errorf("mount directory: %w", err)
@@ -573,7 +572,7 @@ func (a *allocator) unmountVolumeOnHost(job jobs.Job, allocationID string) error
 			return fmt.Errorf("create volume unmounter: %w", err)
 		}
 
-		desginationPath := filepath.Join(a.workDir, "volumes", allocationID, v.Name)
+		desginationPath := volume.HostPath(a.workDir, allocationID, v)
 		err = mounter.Unmount(desginationPath)
 		if err != nil {
 			return fmt.Errorf("failed to unmount volume: %w", err)
