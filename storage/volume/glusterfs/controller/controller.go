@@ -180,7 +180,12 @@ func (gc *GlusterController) CreateVolume(volName string, clientPem string) (str
 		return "", fmt.Errorf("failed to generate brick hash: %w", err)
 	}
 
-	args := []string{"volume", "create", volName, fmt.Sprintf("%s:%s", gc.glusterfsServerHostname, filepath.Join(gc.bricksDir, hex.EncodeToString(generatedBrickName)))}
+	args := make([]string, 0, 4)
+	args = append(args,
+		"volume", "create", volName,
+		fmt.Sprintf("%s:%s", gc.glusterfsServerHostname,
+			filepath.Join(gc.bricksDir, hex.EncodeToString(generatedBrickName))),
+	)
 
 	// force create
 	args = append(args, "force")

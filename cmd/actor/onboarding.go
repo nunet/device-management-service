@@ -119,7 +119,7 @@ func commandLineGPUOnboarding(machineResources types.Resources, gpuArgs string, 
 func interactiveGPUOnboarding(machineResources types.Resources, machineResourceUsage types.Resources, streams cli.Streams) (types.GPUs, error) {
 	var (
 		gpuMap         = make(map[string]types.GPU)
-		gpuPromptItems = make([]*selectPromptItem, 0)
+		gpuPromptItems = make([]*selectPromptItem, 0, len(machineResources.GPUs))
 		selectedGPUs   types.GPUs
 	)
 	for _, gpu := range machineResources.GPUs {

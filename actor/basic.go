@@ -73,7 +73,8 @@ func New(
 		return nil, errors.New("security is nil")
 	}
 
-	dispatchOptions := []DispatchOption{WithRateLimiter(limiter)}
+	dispatchOptions := make([]DispatchOption, 0, len(opt)+1)
+	dispatchOptions = append(dispatchOptions, WithRateLimiter(limiter))
 	dispatchOptions = append(dispatchOptions, opt...)
 	dispatch := NewDispatch(security, dispatchOptions...)
 

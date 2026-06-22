@@ -50,10 +50,10 @@ func ComplexCompare(l, r any) ComplexComparison {
 	val2 := reflect.ValueOf(r)
 
 	// handle pointers
-	if val1.Kind() == reflect.Ptr {
+	if val1.Kind() == reflect.Pointer {
 		val1 = val1.Elem()
 	}
-	if val2.Kind() == reflect.Ptr {
+	if val2.Kind() == reflect.Pointer {
 		val2 = val2.Elem()
 	}
 

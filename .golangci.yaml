@@ -5,13 +5,13 @@ linters:
     - errcheck
     # - goconst
     - gocritic
-    # - govet
+    - govet
     - ineffassign
     - misspell
-    # - nolintlint
-    # - prealloc
+    - nolintlint
+    - prealloc
     - revive
-    # - staticcheck
+    - staticcheck
     - tparallel
     - unconvert
     - unparam

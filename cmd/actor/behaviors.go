@@ -1051,7 +1051,8 @@ Examples:
 			req.Config.OnboardedResources.CPU.Cores = p.CPUCores
 			req.Config.OnboardedResources.CPU.ClockSpeed = p.CPUCLock
 			req.NoGPU = p.NoGPU
-			req.Config.OnboardedResources.GPUs = p.GPUs
+
+			req.Config.OnboardedResources.GPUs = p.GPUs.Copy()
 
 			var err error
 			// convert RAM and Disk from specified unit to bytes if specified otherwise, default to GiB

@@ -512,7 +512,7 @@ selfsign:
 }
 
 func (ctx *BasicCapabilityContext) delegateInvocation(tokenList []*Token, anchor, subject, audience did.DID, expire uint64, provide []Capability) []*Token {
-	var result []*Token //nolint
+	var result []*Token
 	for _, t := range tokenList {
 		var providing []Capability
 		for _, c := range provide {
@@ -579,7 +579,7 @@ selfsign:
 
 func (ctx *BasicCapabilityContext) delegateBroadcast(tokenList []*Token, anchor did.DID, subject did.DID, topic string, expire uint64, provide []Capability) []*Token {
 	topicCap := Capability(topic)
-	var result []*Token //nolint
+	var result []*Token
 	for _, t := range tokenList {
 		var providing []Capability
 		for _, c := range provide {

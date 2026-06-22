@@ -170,7 +170,7 @@ func translateResources(serviceName string, deploy *composetypes.DeployConfig, w
 }
 
 func translateVolumes(serviceName string, volumes []composetypes.ServiceVolumeConfig, projectVolumes composetypes.Volumes, w *WarningCollector) []nunettypes.VolumeConfig {
-	nunetVolumes := make([]nunettypes.VolumeConfig, 0)
+	nunetVolumes := make([]nunettypes.VolumeConfig, 0, len(volumes))
 	for _, vol := range volumes {
 		v := nunettypes.VolumeConfig{
 			Type:             "local",
