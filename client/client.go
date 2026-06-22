@@ -200,7 +200,7 @@ func (c *Client) encodeBody(obj interface{}, headers http.Header) (io.Reader, ht
 	// encoding/json encodes a nil pointer as the JSON document `null`,
 	// irrespective of whether the type implements json.Marshaler or encoding.TextMarshaler.
 	// That is almost certainly not what the caller intended as the request body.
-	if reflect.TypeOf(obj).Kind() == reflect.Ptr && reflect.ValueOf(obj).IsNil() {
+	if reflect.TypeOf(obj).Kind() == reflect.Pointer && reflect.ValueOf(obj).IsNil() {
 		return nil, headers, nil
 	}
 

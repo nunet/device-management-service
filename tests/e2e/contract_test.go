@@ -1151,10 +1151,10 @@ func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
 		suite.Require().NoError(err)
 
 		// Extract all transaction unique IDs by marshalling json
-		var transactionIDs []string
 		var resp contracts.ContractListLocalTransactionsResponse
 		err = json.Unmarshal([]byte(output), &resp)
 		suite.Require().NoError(err)
+		transactionIDs := make([]string, 0, len(resp.Transactions))
 		for _, tx := range resp.Transactions {
 			transactionIDs = append(transactionIDs, tx.UniqueID)
 		}
@@ -1267,10 +1267,10 @@ func DeployWithContractPayPerTimeUtilizationTest(suite *TestSuite) {
 		output2, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
 		suite.Require().NoError(err)
 
-		var transactionIDs2 []string
 		var resp2 contracts.ContractListLocalTransactionsResponse
 		err = json.Unmarshal([]byte(output2), &resp2)
 		suite.Require().NoError(err)
+		transactionIDs2 := make([]string, 0, len(resp2.Transactions))
 		for _, tx := range resp2.Transactions {
 			transactionIDs2 = append(transactionIDs2, tx.UniqueID)
 		}
@@ -1665,10 +1665,10 @@ func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
 		suite.Require().NoError(err)
 
 		// Extract all transaction unique IDs by marshalling json
-		var transactionIDs []string
 		var resp contracts.ContractListLocalTransactionsResponse
 		err = json.Unmarshal([]byte(output), &resp)
 		suite.Require().NoError(err)
+		transactionIDs := make([]string, 0, len(resp.Transactions))
 		for _, tx := range resp.Transactions {
 			transactionIDs = append(transactionIDs, tx.UniqueID)
 		}
@@ -1801,10 +1801,10 @@ func DeployWithContractPayPerResourceUtilizationTest(suite *TestSuite) {
 		output2, err := requester.client.listLocalTransactions(suite.T(), requester.dmsContext, requester.password)
 		suite.Require().NoError(err)
 
-		var transactionIDs2 []string
 		var resp2 contracts.ContractListLocalTransactionsResponse
 		err = json.Unmarshal([]byte(output2), &resp2)
 		suite.Require().NoError(err)
+		transactionIDs2 := make([]string, 0, len(resp2.Transactions))
 		for _, tx := range resp2.Transactions {
 			transactionIDs2 = append(transactionIDs2, tx.UniqueID)
 		}
@@ -2582,7 +2582,7 @@ func DeployWithContractFixedRentalTest(suite *TestSuite) {
 		providerEthAddr := "0x4741783ed607d1496f65749d2d9c94cf6c23352a"
 
 		fixedRentalAmount := "10.00"
-		paymentPeriod := "minute" //nolint:goconst
+		paymentPeriod := "minute"
 		paymentPeriodCount := "5" // Invoice every minute for fast testing
 
 		// Start mock RPC server

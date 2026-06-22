@@ -248,7 +248,7 @@ func (f *basicRegistry) restoreDeployment(
 			"orchestratorID", id,
 			"manifestNodes", len(manifest.Nodes),
 			"nodeIDs", func() []string {
-				var nodeIDs []string
+				nodeIDs := make([]string, 0, len(manifest.Nodes))
 				for nodeID := range manifest.Nodes {
 					nodeIDs = append(nodeIDs, nodeID)
 				}

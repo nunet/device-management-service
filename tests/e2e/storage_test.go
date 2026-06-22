@@ -146,7 +146,7 @@ func TLSGlusterGenerator(t *testing.T) {
 	multiAddr, err := dms1.P2P.GetMultiaddr()
 	require.NoError(t, err)
 
-	bootstrap := []string{}
+	bootstrap := make([]string, 0, len(multiAddr))
 	for _, v := range multiAddr {
 		bootstrap = append(bootstrap, v.String())
 	}

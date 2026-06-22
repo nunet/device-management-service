@@ -345,7 +345,7 @@ func (o *BasicOrchestrator) revert(cfg jtypes.EnsembleConfig, mf jtypes.Ensemble
 		"orchestratorID", mf.ID,
 		"manifestNodes", len(mf.Nodes),
 		"nodeIDs", func() []string {
-			var nodeIDs []string
+			nodeIDs := make([]string, 0, len(mf.Nodes))
 			for nodeID := range mf.Nodes {
 				nodeIDs = append(nodeIDs, nodeID)
 			}
@@ -359,7 +359,7 @@ func (o *BasicOrchestrator) revert(cfg jtypes.EnsembleConfig, mf jtypes.Ensemble
 	nodesToRevert := make([]struct {
 		nodeID string
 		handle actor.Handle
-	}, len(mf.Nodes))
+	}, 0, len(mf.Nodes))
 
 	for n, nmf := range mf.Nodes {
 		nodesToRevert = append(nodesToRevert, struct {

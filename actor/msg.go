@@ -29,7 +29,7 @@ type HealthCheckResponse struct {
 // Message constructs a new message envelope and applies the options
 func Message(src Handle, dest Handle, behavior string, payload interface{}, opt ...MessageOption) (Envelope, error) {
 	var data []byte
-	if payload == nil || (reflect.ValueOf(payload).Kind() == reflect.Ptr && reflect.ValueOf(payload).IsNil()) {
+	if payload == nil || (reflect.ValueOf(payload).Kind() == reflect.Pointer && reflect.ValueOf(payload).IsNil()) {
 		data = []byte{}
 	} else {
 		var err error
@@ -64,7 +64,8 @@ func ReplyTo(msg Envelope, payload interface{}, opt ...MessageOption) (Envelope,
 		return Envelope{}, fmt.Errorf("no behavior to reply to: %w", ErrInvalidMessage)
 	}
 
-	msgOptions := []MessageOption{WithMessageExpiry(msg.Options.Expire)}
+	msgOptions := make([]MessageOption, 0, len(opt)+1)
+	msgOptions = append(msgOptions, WithMessageExpiry(msg.Options.Expire))
 	msgOptions = append(msgOptions, opt...)
 	return Message(msg.To, msg.From, msg.Options.ReplyTo, payload, msgOptions...)
 }

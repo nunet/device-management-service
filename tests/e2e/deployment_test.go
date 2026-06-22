@@ -184,8 +184,6 @@ func DeploymentAssertSubnet(suite *TestSuite) {
 	suite.Contains(deploymentResult, `"Status": "OK"`)
 	ensembleID := extractEnsembleID(deploymentResult)
 
-	executions := []executionInfo{}
-
 	// Wait until the deployment status is "Running".
 	suite.Require().Eventually(func() bool {
 		status, err := deployer.client.deploymentStatus(suite.T(), deployer.userContext, deployer.password, ensembleID)
@@ -205,6 +203,7 @@ func DeploymentAssertSubnet(suite *TestSuite) {
 	suite.assertRunningPhase(*ensembleCfg, ensembleID, deployer, providers)
 
 	// track executions IDs so that we cna check if it was shutdown
+	executions := make([]executionInfo, 0, len(providers))
 	for _, provider := range providers {
 		executions = append(executions, suite.getExecutions(provider)...)
 	}

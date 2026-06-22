@@ -17,11 +17,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/spf13/afero"
-
-	"golang.org/x/exp/slices"
 )
 
 // RandomString generates a random string of length n

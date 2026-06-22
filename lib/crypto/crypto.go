@@ -10,10 +10,9 @@ package crypto
 
 import (
 	"crypto/rand"
+	"crypto/sha3"
 	"errors"
 	"io"
-
-	"golang.org/x/crypto/sha3"
 )
 
 // RandomEntropy bytes from rand.Reader

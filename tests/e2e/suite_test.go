@@ -680,8 +680,8 @@ func (s *TestSuite) setupTestNetwork() {
 
 		// We add all the nodes except the last one to the bootstrap peers to ensure that the network is connected.
 		if i != s.numNodes-1 {
-			bootstrapAddr := make([]string, 0)
 			addrs := strings.Split(networkStats.ListenAddr, ", ")
+			bootstrapAddr := make([]string, 0, len(addrs))
 			for _, a := range addrs {
 				bootstrapAddr = append(bootstrapAddr, fmt.Sprintf("%s/p2p/%s", a, networkStats.ID))
 			}

@@ -225,25 +225,25 @@ func TestHardwareCapability_Comparable(t *testing.T) {
 
 	t.Run("Localities checks", func(t *testing.T) {
 		t.Parallel()
-		var localities1 []Locality
+		localities1 := make([]Locality, 0, 2)
 		locality1 := Locality{Kind: "NuNetRegion", Name: "us-west-1"}
 		locality2 := Locality{Kind: "GeoRegion", Name: "EU"}
 		localities1 = append(localities1, locality1)
 		localities1 = append(localities1, locality2)
 
-		var localities2 []Locality
+		localities2 := make([]Locality, 0, 2)
 		locality3 := Locality{Kind: "NuNetRegion", Name: "us-west-1"}
 		locality4 := Locality{Kind: "GeoRegion", Name: "US"}
 		localities2 = append(localities2, locality3)
 		localities2 = append(localities2, locality4)
 
-		var localities3 []Locality
+		localities3 := make([]Locality, 0, 2)
 		locality5 := Locality{Kind: "NuNetRegion", Name: "us-west-1"}
 		locality6 := Locality{Kind: "GeoRegion", Name: "EU"}
 		localities3 = append(localities3, locality5)
 		localities3 = append(localities3, locality6)
 
-		var localities4 []Locality
+		localities4 := make([]Locality, 0, 3)
 		locality7 := Locality{Kind: "NuNetRegion", Name: "us-west-1"}
 		locality8 := Locality{Kind: "GeoRegion", Name: "EU"}
 		locality9 := Locality{Kind: "GeoCounty", Name: "Belgium"}

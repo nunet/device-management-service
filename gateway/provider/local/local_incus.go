@@ -52,7 +52,7 @@ func (p *IncusProvider) Name() string {
 
 // ListPlans returns a few static plans that represent local resource profiles.
 func (p *IncusProvider) ListPlans(_ context.Context) ([]provider.Plan, error) {
-	plans := make([]provider.Plan, 0)
+	plans := make([]provider.Plan, 0, 1)
 	plans = append(plans, provider.Plan{
 		ID:          "plan1",
 		Name:        "VM1",

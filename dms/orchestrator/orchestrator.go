@@ -764,7 +764,7 @@ func (o *BasicOrchestrator) ManifestNodesPeerIDs() []string {
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
-	ids := make([]string, len(o.manifest.Nodes))
+	ids := make([]string, 0, len(o.manifest.Nodes))
 	for _, n := range o.manifest.Nodes {
 		ids = append(ids, n.Peer)
 	}

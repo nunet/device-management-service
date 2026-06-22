@@ -78,7 +78,7 @@ func (m *SyncMap[K, V]) String() string {
 		}
 		first = false
 		// Properly format the key-value pair
-		sb.WriteString(fmt.Sprintf("%v=%v", key, value))
+		fmt.Fprintf(&sb, "%v=%v", key, value)
 		return true
 	})
 

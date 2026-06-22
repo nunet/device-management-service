@@ -119,8 +119,8 @@ func (c *Client) grant(t *testing.T, context, otherDID, passphrase string) strin
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
-	args := []string{
-		"cap", "grant", "--context", context,
+	args := make([]string, 0, 35)
+	args = append(args, "cap", "grant", "--context", context,
 		"--cap", "/dms/tokenomics",
 		"--cap", "/dms/tokenomics/contract/payment",
 		"--cap", "/dms/tokenomics/contract/propose",
@@ -135,8 +135,8 @@ func (c *Client) grant(t *testing.T, context, otherDID, passphrase string) strin
 		"--cap", "/dms/deployment",
 		"--cap", "/broadcast",
 		"--topic", "/nunet",
-		"--expiry", time.Now().Add(1 * 365 * 24 * time.Hour).Format(time.DateOnly),
-	}
+		"--expiry", time.Now().Add(1*365*24*time.Hour).Format(time.DateOnly),
+	)
 	args = append(args, otherDID)
 	root.SetArgs(args)
 
@@ -152,7 +152,8 @@ func (c *Client) delegate(t *testing.T, context, otherDID, passphrase string) st
 
 	err := os.Setenv(node.DMSPassphraseEnv, passphrase)
 	require.NoError(t, err)
-	args := []string{
+	args := make([]string, 0, 35)
+	args = append(args,
 		"cap", "delegate", "--context", context,
 		"--cap", "/dms/tokenomics",
 		"--cap", "/dms/tokenomics/contract/payment",
@@ -168,8 +169,8 @@ func (c *Client) delegate(t *testing.T, context, otherDID, passphrase string) st
 		"--cap", "/dms/deployment",
 		"--cap", "/broadcast",
 		"--topic", "/nunet",
-		"--expiry", time.Now().Add(1 * 365 * 24 * time.Hour).Format(time.DateOnly),
-	}
+		"--expiry", time.Now().Add(1*365*24*time.Hour).Format(time.DateOnly),
+	)
 	args = append(args, otherDID)
 	root.SetArgs(args)
 

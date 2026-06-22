@@ -18,7 +18,7 @@ import (
 func UpdateField[T interface{}](input T, fieldName string, newValue interface{}) (T, error) {
 	// Use reflection to get the struct's field
 	val := reflect.ValueOf(input)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		// If input is a pointer, get the underlying element
 		val = val.Elem()
 	} else {
@@ -71,7 +71,7 @@ func IsEmptyValue(value interface{}) bool {
 	val := reflect.ValueOf(value)
 
 	// If the value is a pointer, dereference it to get the underlying element
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		val = val.Elem()
 	}
 

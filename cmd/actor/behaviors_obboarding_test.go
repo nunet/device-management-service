@@ -53,7 +53,7 @@ func (m *mockOnboardingBehaviorClient) HardwareUsage(ctx context.Context, opts .
 }
 
 func newResourceResponse(cores float32, ram, disk uint64, gpus map[types.GPUVendor]uint64) types.Resources {
-	var gpuList types.GPUs
+	gpuList := make(types.GPUs, 0, len(gpus))
 	models := map[types.GPUVendor]string{
 		types.GPUVendorNvidia: "NVIDIA GeForce RTX 3080",
 		types.GPUVendorAMDATI: "AMD Radeon RX 6800",
