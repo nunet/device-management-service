@@ -27,14 +27,9 @@ import (
 	"github.com/containerd/errdefs"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/types"
 	"gitlab.com/nunet/device-management-service/utils"
-)
-
-const (
-	DefaultSocketPath = "/run/containerd/containerd.sock"
-	DefaultNamespace  = "nunet"
-	DefaultConfigPath = "/etc/containerd/config.toml"
 )
 
 var ErrNotInstalled = fmt.Errorf("containerd is not installed")
@@ -43,7 +38,7 @@ type Executor struct {
 	ID string
 
 	containerdClient *client.Client
-	namespace        string
+	cfg              config.Containerd
 	networkMgr       *networkManager
 
 	executions utils.SyncMap[string, *executionState]
@@ -51,8 +46,8 @@ type Executor struct {
 
 var _ types.Executor = (*Executor)(nil)
 
-func NewExecutor(ctx context.Context, id string) (*Executor, error) {
-	cli, err := client.New(DefaultSocketPath)
+func NewExecutor(ctx context.Context, id string, cfg config.Containerd) (*Executor, error) {
+	cli, err := client.New(cfg.SocketPath)
 	if err != nil {
 		return nil, err
 	}
@@ -60,19 +55,19 @@ func NewExecutor(ctx context.Context, id string) (*Executor, error) {
 	e := &Executor{
 		ID:               id,
 		containerdClient: cli,
-		namespace:        DefaultNamespace,
+		cfg:              cfg,
 	}
 
 	if !e.IsAvailable(ctx) {
 		return nil, ErrNotInstalled
 	}
 
-	netMgr, err := newNetworkManager()
+	netMgr, err := newNetworkManager(cfg)
 	if err != nil {
 		log.Warnw("containerd CNI network manager unavailable - skipping network config",
 			"error", err,
-			"config", filepath.Join(DefaultCNINetConfDir, DefaultCNINetworkName+".conflist"),
-			"plugins", DefaultCNIPluginDir,
+			"config", filepath.Join(cfg.CNINetConfDir, cfg.CNINetworkName+".conflist"),
+			"plugins", cfg.CNIPluginDir,
 		)
 	} else {
 		e.networkMgr = netMgr
@@ -94,11 +89,11 @@ func (e *Executor) IsAvailable(_ context.Context) bool {
 		return false
 	}
 
-	if _, err := os.Stat(DefaultConfigPath); err != nil {
+	if _, err := os.Stat(e.cfg.ConfigPath); err != nil {
 		return false
 	}
 
-	if err := checkContainerdSocketAccess(DefaultSocketPath); err != nil {
+	if err := checkContainerdSocketAccess(e.cfg.SocketPath); err != nil {
 		return false
 	}
 
@@ -595,7 +590,7 @@ func (e *Executor) withNamespace(ctx context.Context) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return namespaces.WithNamespace(ctx, e.namespace)
+	return namespaces.WithNamespace(ctx, e.cfg.Namespace)
 }
 
 func IsShimAvailable(runtime string) bool {

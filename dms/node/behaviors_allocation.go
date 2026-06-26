@@ -27,6 +27,7 @@ import (
 	"gitlab.com/nunet/device-management-service/dms/orchestrator"
 	containerdexecutor "gitlab.com/nunet/device-management-service/executor/containerd"
 	"gitlab.com/nunet/device-management-service/executor/docker"
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/lib/crypto"
 	"gitlab.com/nunet/device-management-service/lib/did"
 	"gitlab.com/nunet/device-management-service/lib/ucan"
@@ -214,7 +215,7 @@ func (n *Node) createAllocation(
 		contracts = make(map[string]types.ContractConfig)
 	}
 
-	executor, err := createExecutor(context.Background(), n.fs, job.Execution.Type)
+	executor, err := createExecutor(context.Background(), n.fs, job.Execution.Type, n.dmsConfig.Job.Containerd)
 	if err != nil {
 		return nil, fmt.Errorf("create executor: %w", err)
 	}
@@ -539,7 +540,7 @@ func (n *Node) handleAllocationsList(msg actor.Envelope) {
 	n.sendReply(msg, resp)
 }
 
-func createExecutor(ctx context.Context, fs afero.Afero, executionType string) (types.Executor, error) {
+func createExecutor(ctx context.Context, fs afero.Afero, executionType string, containerdCfg config.Containerd) (types.Executor, error) {
 	switch executionType {
 	case types.ExecutorTypeDocker.String():
 		id := uuid.New().String()
@@ -550,7 +551,7 @@ func createExecutor(ctx context.Context, fs afero.Afero, executionType string) (
 		return exec, nil
 	case types.ExecutorTypeContainerd.String():
 		id := uuid.New().String()
-		exec, err := containerdexecutor.NewExecutor(ctx, id)
+		exec, err := containerdexecutor.NewExecutor(ctx, id, containerdCfg)
 		if err != nil {
 			return nil, fmt.Errorf("create executor: %w", err)
 		}

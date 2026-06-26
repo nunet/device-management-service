@@ -27,7 +27,7 @@ func (n *Node) initSupportedExecutors(ctx context.Context) error {
 		}
 	}
 
-	containerdExec, err := containerdexecutor.NewExecutor(ctx, "root")
+	containerdExec, err := containerdexecutor.NewExecutor(ctx, "root", n.dmsConfig.Job.Containerd)
 	if err == nil {
 		n.executors[string(job_types.ExecutorContainerd)] = executorMetadata{
 			executor:      containerdExec,

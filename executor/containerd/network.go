@@ -20,6 +20,7 @@ import (
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	current "github.com/containernetworking/cni/pkg/types/100"
 
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -28,30 +29,32 @@ type networkManager struct {
 	netConfDir   string
 	networkName  string
 	ifName       string
+	bridgeIface  string
 	netNSBaseDir string
 }
 
-func newNetworkManager() (*networkManager, error) {
-	if _, err := os.Stat(DefaultCNINetConfDir); err != nil {
-		return nil, fmt.Errorf("CNI config directory %q: %w", DefaultCNINetConfDir, err)
+func newNetworkManager(cfg config.Containerd) (*networkManager, error) {
+	if _, err := os.Stat(cfg.CNINetConfDir); err != nil {
+		return nil, fmt.Errorf("CNI config directory %q: %w", cfg.CNINetConfDir, err)
 	}
-	if _, err := os.Stat(DefaultCNIPluginDir); err != nil {
-		return nil, fmt.Errorf("CNI plugin directory %q: %w", DefaultCNIPluginDir, err)
+	if _, err := os.Stat(cfg.CNIPluginDir); err != nil {
+		return nil, fmt.Errorf("CNI plugin directory %q: %w", cfg.CNIPluginDir, err)
 	}
-	if err := os.MkdirAll(DefaultNetNSBaseDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create netns directory %q: %w", DefaultNetNSBaseDir, err)
+	if err := os.MkdirAll(cfg.NetNSBaseDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create netns directory %q: %w", cfg.NetNSBaseDir, err)
 	}
 
-	if _, err := libcni.LoadConfList(DefaultCNINetConfDir, DefaultCNINetworkName); err != nil {
-		return nil, fmt.Errorf("load CNI network %q from %q: %w", DefaultCNINetworkName, DefaultCNINetConfDir, err)
+	if _, err := libcni.LoadConfList(cfg.CNINetConfDir, cfg.CNINetworkName); err != nil {
+		return nil, fmt.Errorf("load CNI network %q from %q: %w", cfg.CNINetworkName, cfg.CNINetConfDir, err)
 	}
 
 	return &networkManager{
-		cni:          libcni.NewCNIConfig([]string{DefaultCNIPluginDir}, nil),
-		netConfDir:   DefaultCNINetConfDir,
-		networkName:  DefaultCNINetworkName,
+		cni:          libcni.NewCNIConfig([]string{cfg.CNIPluginDir}, nil),
+		netConfDir:   cfg.CNINetConfDir,
+		networkName:  cfg.CNINetworkName,
 		ifName:       DefaultCNIIfName,
-		netNSBaseDir: DefaultNetNSBaseDir,
+		bridgeIface:  cfg.CNIBridgeIface,
+		netNSBaseDir: cfg.NetNSBaseDir,
 	}, nil
 }
 
@@ -93,14 +96,14 @@ func (m *networkManager) setup(
 		return nil, fmt.Errorf("CNI ADD for %q: %w", containerID, err)
 	}
 
-	setup.netInfo = buildNetInfo(m.ifName, ports, result)
+	setup.netInfo = buildNetInfo(m.ifName, m.bridgeIface, ports, result)
 	return setup, nil
 }
 
-func buildNetInfo(ifName string, ports []types.PortsToBind, result cnitypes.Result) types.ExecutorNetInfo {
+func buildNetInfo(ifName, bridgeIface string, ports []types.PortsToBind, result cnitypes.Result) types.ExecutorNetInfo {
 	info := types.ExecutorNetInfo{
 		InterfaceName: ifName,
-		HostBridge:    DefaultCNIBridgeIface,
+		HostBridge:    bridgeIface,
 		MappedPorts:   mappedPortsFromRequest(ports),
 	}
 

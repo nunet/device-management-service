@@ -68,6 +68,8 @@ func TestLoadDefaults(t *testing.T) {
 	require.Equal(t, "127.0.0.1", cfg.Rest.Addr)
 	require.Equal(t, uint32(9999), cfg.Rest.Port)
 	require.Equal(t, "INFO", cfg.Logging.Level)
+	require.Equal(t, "/run/containerd/containerd.sock", cfg.Job.Containerd.SocketPath)
+	require.Equal(t, "nunet", cfg.Job.Containerd.Namespace)
 }
 
 func TestLoadFromFile(t *testing.T) {

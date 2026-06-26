@@ -17,6 +17,7 @@ import (
 	current "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/stretchr/testify/require"
 
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -29,9 +30,9 @@ func TestBuildNetInfo(t *testing.T) {
 			{IP: "127.0.0.1", HostPort: 8080, ExecutorPort: 3000},
 		}
 
-		info := buildNetInfo(DefaultCNIIfName, ports, nil)
+		info := buildNetInfo(DefaultCNIIfName, config.DefaultConfig.Job.Containerd.CNIBridgeIface, ports, nil)
 		require.Equal(t, DefaultCNIIfName, info.InterfaceName)
-		require.Equal(t, DefaultCNIBridgeIface, info.HostBridge)
+		require.Equal(t, config.DefaultConfig.Job.Containerd.CNIBridgeIface, info.HostBridge)
 		require.Len(t, info.MappedPorts, 1)
 		require.Equal(t, "127.0.0.1", info.MappedPorts[0].HostIP)
 		require.Equal(t, 8080, info.MappedPorts[0].HostPort)
@@ -51,7 +52,7 @@ func TestBuildNetInfo(t *testing.T) {
 		var result current.Result
 		require.NoError(t, json.Unmarshal([]byte(raw), &result))
 
-		info := buildNetInfo(DefaultCNIIfName, ports, &result)
+		info := buildNetInfo(DefaultCNIIfName, config.DefaultConfig.Job.Containerd.CNIBridgeIface, ports, &result)
 		require.Equal(t, "10.22.0.5", info.IPAddress)
 		require.Equal(t, "10.22.0.5/16", info.CIDR)
 	})
@@ -68,9 +69,9 @@ func TestBuildNetInfo(t *testing.T) {
 		var result current.Result
 		require.NoError(t, json.Unmarshal([]byte(raw), &result))
 
-		info := buildNetInfo(DefaultCNIIfName, ports, &result)
+		info := buildNetInfo(DefaultCNIIfName, config.DefaultConfig.Job.Containerd.CNIBridgeIface, ports, &result)
 		require.Equal(t, DefaultCNIIfName, info.InterfaceName)
-		require.Equal(t, DefaultCNIBridgeIface, info.HostBridge)
+		require.Equal(t, config.DefaultConfig.Job.Containerd.CNIBridgeIface, info.HostBridge)
 		require.Equal(t, "0.0.0.0", info.MappedPorts[0].HostIP)
 		require.Empty(t, info.IPAddress)
 		require.Empty(t, info.CIDR)
