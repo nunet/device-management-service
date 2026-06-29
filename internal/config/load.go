@@ -107,6 +107,16 @@ var DefaultConfig = Config{
 	},
 	Job: Job{
 		AllowPrivilegedDocker: false,
+		Containerd: Containerd{
+			SocketPath:     "/run/containerd/containerd.sock",
+			Namespace:      "nunet",
+			ConfigPath:     "/etc/containerd/config.toml",
+			CNINetConfDir:  "/etc/cni/net.d",
+			CNIPluginDir:   "/opt/cni/bin",
+			CNINetworkName: "nunet-bridge",
+			CNIBridgeIface: "cni-nunet0",
+			NetNSBaseDir:   "/var/run/netns",
+		},
 	},
 }
 

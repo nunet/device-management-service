@@ -80,8 +80,20 @@ type P2P struct {
 }
 
 type Job struct {
-	AllowPrivilegedDocker         bool `mapstructure:"allow_privileged_docker" json:"allow_privileged_docker"`
-	RequireContractsForDeployment bool `mapstructure:"require_contracts_for_deployment" json:"require_contracts_for_deployment"`
+	AllowPrivilegedDocker         bool       `mapstructure:"allow_privileged_docker" json:"allow_privileged_docker"`
+	RequireContractsForDeployment bool       `mapstructure:"require_contracts_for_deployment" json:"require_contracts_for_deployment"`
+	Containerd                    Containerd `mapstructure:"containerd" json:"containerd"`
+}
+
+type Containerd struct {
+	SocketPath     string `mapstructure:"socket_path" json:"socket_path"`
+	Namespace      string `mapstructure:"namespace" json:"namespace"`
+	ConfigPath     string `mapstructure:"config_path" json:"config_path"`
+	CNINetConfDir  string `mapstructure:"cni_net_conf_dir" json:"cni_net_conf_dir"`
+	CNIPluginDir   string `mapstructure:"cni_plugin_dir" json:"cni_plugin_dir"`
+	CNINetworkName string `mapstructure:"cni_network_name" json:"cni_network_name"`
+	CNIBridgeIface string `mapstructure:"cni_bridge_iface" json:"cni_bridge_iface"`
+	NetNSBaseDir   string `mapstructure:"netns_base_dir" json:"netns_base_dir"`
 }
 
 // Observability

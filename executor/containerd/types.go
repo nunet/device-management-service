@@ -34,12 +34,7 @@ const (
 )
 
 const (
-	DefaultCNINetConfDir  = "/etc/cni/net.d"
-	DefaultCNIPluginDir   = "/opt/cni/bin"
-	DefaultCNINetworkName = "nunet-bridge"
-	DefaultCNIBridgeIface = "cni-nunet0"
-	DefaultCNIIfName      = "eth0"
-	DefaultNetNSBaseDir   = "/var/run/netns"
+	DefaultCNIIfName = "eth0"
 )
 
 type EngineSpec struct {

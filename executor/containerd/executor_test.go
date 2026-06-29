@@ -20,6 +20,7 @@ import (
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/stretchr/testify/require"
 
+	"gitlab.com/nunet/device-management-service/internal/config"
 	"gitlab.com/nunet/device-management-service/types"
 )
 
@@ -424,7 +425,7 @@ func TestCommandArgs(t *testing.T) {
 func TestWithNamespace(t *testing.T) {
 	t.Parallel()
 
-	e := &Executor{namespace: "test-ns"}
+	e := &Executor{cfg: config.Containerd{Namespace: "test-ns"}}
 
 	ctx := e.withNamespace(context.Background())
 	ns, ok := namespaces.Namespace(ctx)
