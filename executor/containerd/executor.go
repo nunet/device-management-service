@@ -169,10 +169,41 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		}
 	}
 
-	args := commandArgs(spec.Entrypoint, spec.Cmd)
+	initScriptsDir, err := prepInitScripts(request.ProvisionScripts, request.ExecutionID)
+	if err != nil {
+		if netSetup != nil && e.networkMgr != nil {
+			_ = e.networkMgr.teardown(nsCtx, netSetup)
+		}
+		return fmt.Errorf("failed to prepare init scripts: %w", err)
+	}
+
+	entrypoint := spec.Entrypoint
+	cmd := spec.Cmd
+	var processArgs []string
+	if initScriptsDir != "" {
+		if len(entrypoint) == 0 {
+			if imageSpec, inspectErr := image.Spec(nsCtx); inspectErr == nil {
+				entrypoint = imageSpec.Config.Entrypoint
+				if len(cmd) == 0 {
+					cmd = imageSpec.Config.Cmd
+				}
+			} else {
+				log.Warnw("failed to inspect image for entrypoint", "image", spec.Image, "error", inspectErr)
+			}
+		}
+
+		wrapperCmd := fmt.Sprintf("%s/run_provision_scripts.sh && exec %s %s",
+			initScriptsDir,
+			strings.Join(entrypoint, " "),
+			strings.Join(cmd, " "))
+		processArgs = []string{"/bin/sh", "-c", wrapperCmd}
+	} else {
+		processArgs = commandArgs(spec.Entrypoint, spec.Cmd)
+	}
+
 	specOpts := []oci.SpecOpts{oci.WithImageConfig(image)}
-	if len(args) > 0 {
-		specOpts = append(specOpts, oci.WithProcessArgs(args...))
+	if len(processArgs) > 0 {
+		specOpts = append(specOpts, oci.WithProcessArgs(processArgs...))
 	}
 	if len(spec.Environment) > 0 {
 		specOpts = append(specOpts, oci.WithEnv(spec.Environment))
@@ -189,10 +220,21 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 
 	mounts, err := makeMounts(request.Inputs, request.Outputs, request.ResultsDir)
 	if err != nil {
+		if initScriptsDir != "" {
+			_ = removeInitScriptsDir(request.ExecutionID)
+		}
 		if netSetup != nil && e.networkMgr != nil {
 			_ = e.networkMgr.teardown(nsCtx, netSetup)
 		}
 		return fmt.Errorf("failed to create container mounts: %w", err)
+	}
+	if initScriptsDir != "" {
+		mounts = append(mounts, specs.Mount{
+			Type:        "bind",
+			Source:      initScriptsDir,
+			Destination: initScriptsDir,
+			Options:     []string{"rbind"},
+		})
 	}
 	if len(mounts) > 0 {
 		specOpts = append(specOpts, oci.WithMounts(mounts))
@@ -207,6 +249,9 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 
 	container, err := e.containerdClient.NewContainer(nsCtx, containerID, containerOpts...)
 	if err != nil {
+		if initScriptsDir != "" {
+			_ = removeInitScriptsDir(request.ExecutionID)
+		}
 		if netSetup != nil && e.networkMgr != nil {
 			_ = e.networkMgr.teardown(nsCtx, netSetup)
 		}
@@ -225,6 +270,9 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 
 	cleanup := func() {
 		state.closeLogFiles()
+		if initScriptsDir != "" {
+			_ = removeInitScriptsDir(request.ExecutionID)
+		}
 		if state.network != nil && e.networkMgr != nil {
 			_ = e.networkMgr.teardown(nsCtx, state.network)
 			state.network = nil
@@ -404,6 +452,8 @@ func (e *Executor) Remove(executionID string, timeout time.Duration) error {
 		state.network = nil
 	}
 
+	_ = removeInitScriptsDir(executionID)
+
 	e.executions.Delete(executionID)
 	return nil
 }
@@ -420,6 +470,8 @@ func (e *Executor) Cleanup(_ context.Context) error {
 	if err := e.containerdClient.Close(); err != nil {
 		errs = append(errs, err)
 	}
+
+	removeAllInitScriptsDirs()
 
 	if len(errs) == 0 {
 		return nil
