@@ -138,3 +138,45 @@ func TestToPortMappings(t *testing.T) {
 		require.Equal(t, "10.1.1.10", mappings[1].HostIP)
 	})
 }
+
+func TestBuildResolvConf(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with gateway", func(t *testing.T) {
+		t.Parallel()
+		content := buildResolvConf("10.0.0.1")
+		require.Contains(t, content, "nameserver 10.0.0.1\n")
+		require.Contains(t, content, "nameserver 1.1.1.1\n")
+		require.Contains(t, content, "search internal\n")
+		require.Contains(t, content, "options ndots:1 timeout:2 attempts:1\n")
+	})
+
+	t.Run("without gateway", func(t *testing.T) {
+		t.Parallel()
+		content := buildResolvConf("")
+		require.NotContains(t, content, "nameserver \n")
+		require.Contains(t, content, "nameserver 1.1.1.1\n")
+	})
+}
+
+func TestBuildHosts(t *testing.T) {
+	t.Parallel()
+
+	content := buildHosts("exec-123", "10.88.0.5")
+	require.Contains(t, content, "127.0.0.1\tlocalhost\n")
+	require.Contains(t, content, "::1\tlocalhost ip6-localhost ip6-loopback\n")
+	require.Contains(t, content, "10.88.0.5\texec-123\n")
+
+	withoutIP := buildHosts("exec-123", "")
+	require.NotContains(t, withoutIP, "exec-123")
+}
+
+func TestProvisionBindMount(t *testing.T) {
+	t.Parallel()
+
+	mount := provisionBindMount("/tmp/nunet/init-scripts-id")
+	require.Equal(t, "bind", mount.Type)
+	require.Equal(t, "/tmp/nunet/init-scripts-id", mount.Source)
+	require.Equal(t, provisionMountPath, mount.Destination)
+	require.Equal(t, []string{"bind", "ro", "nosuid", "nodev"}, mount.Options)
+}

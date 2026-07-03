@@ -159,18 +159,31 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 	snapshotID := request.ExecutionID + "-snapshot"
 
 	var netSetup *networkSetup
-	if len(request.PortsToBind) > 0 {
-		if e.networkMgr == nil {
-			return fmt.Errorf("unable to do port forwarding, networking requires CNI")
-		}
+	if e.networkMgr != nil {
 		netSetup, err = e.networkMgr.setup(nsCtx, containerID, request.PortsToBind)
 		if err != nil {
 			return fmt.Errorf("failed to setup CNI network for execution %q: %w", request.ExecutionID, err)
 		}
+	} else if len(request.PortsToBind) > 0 {
+		return fmt.Errorf("unable to do port forwarding, networking requires CNI")
+	}
+
+	var containerIP string
+	if netSetup != nil {
+		containerIP = netSetup.netInfo.IPAddress
+	}
+
+	networkConfMounts, err := prepNetworkConf(request.ExecutionID, request.GatewayIP, containerIP)
+	if err != nil {
+		if netSetup != nil && e.networkMgr != nil {
+			_ = e.networkMgr.teardown(nsCtx, netSetup)
+		}
+		return fmt.Errorf("failed to prepare network config: %w", err)
 	}
 
 	initScriptsDir, err := prepInitScripts(request.ProvisionScripts, request.ExecutionID)
 	if err != nil {
+		_ = removeNetworkConfDir(request.ExecutionID)
 		if netSetup != nil && e.networkMgr != nil {
 			_ = e.networkMgr.teardown(nsCtx, netSetup)
 		}
@@ -193,7 +206,7 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		}
 
 		wrapperCmd := fmt.Sprintf("%s/run_provision_scripts.sh && exec %s %s",
-			initScriptsDir,
+			provisionMountPath,
 			strings.Join(entrypoint, " "),
 			strings.Join(cmd, " "))
 		processArgs = []string{"/bin/sh", "-c", wrapperCmd}
@@ -223,18 +236,15 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		if initScriptsDir != "" {
 			_ = removeInitScriptsDir(request.ExecutionID)
 		}
+		_ = removeNetworkConfDir(request.ExecutionID)
 		if netSetup != nil && e.networkMgr != nil {
 			_ = e.networkMgr.teardown(nsCtx, netSetup)
 		}
 		return fmt.Errorf("failed to create container mounts: %w", err)
 	}
+	mounts = append(mounts, networkConfMounts...)
 	if initScriptsDir != "" {
-		mounts = append(mounts, specs.Mount{
-			Type:        "bind",
-			Source:      initScriptsDir,
-			Destination: initScriptsDir,
-			Options:     []string{"rbind"},
-		})
+		mounts = append(mounts, provisionBindMount(initScriptsDir))
 	}
 	if len(mounts) > 0 {
 		specOpts = append(specOpts, oci.WithMounts(mounts))
@@ -252,6 +262,7 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		if initScriptsDir != "" {
 			_ = removeInitScriptsDir(request.ExecutionID)
 		}
+		_ = removeNetworkConfDir(request.ExecutionID)
 		if netSetup != nil && e.networkMgr != nil {
 			_ = e.networkMgr.teardown(nsCtx, netSetup)
 		}
@@ -273,6 +284,7 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		if initScriptsDir != "" {
 			_ = removeInitScriptsDir(request.ExecutionID)
 		}
+		_ = removeNetworkConfDir(request.ExecutionID)
 		if state.network != nil && e.networkMgr != nil {
 			_ = e.networkMgr.teardown(nsCtx, state.network)
 			state.network = nil
@@ -453,6 +465,7 @@ func (e *Executor) Remove(executionID string, timeout time.Duration) error {
 	}
 
 	_ = removeInitScriptsDir(executionID)
+	_ = removeNetworkConfDir(executionID)
 
 	e.executions.Delete(executionID)
 	return nil
@@ -472,6 +485,7 @@ func (e *Executor) Cleanup(_ context.Context) error {
 	}
 
 	removeAllInitScriptsDirs()
+	removeAllNetworkConfDirs()
 
 	if len(errs) == 0 {
 		return nil
