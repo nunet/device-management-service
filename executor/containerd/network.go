@@ -18,6 +18,7 @@ import (
 	containernetns "github.com/containerd/containerd/v2/pkg/netns"
 	"github.com/containernetworking/cni/libcni"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
+
 	current "github.com/containernetworking/cni/pkg/types/100"
 
 	"gitlab.com/nunet/device-management-service/internal/config"

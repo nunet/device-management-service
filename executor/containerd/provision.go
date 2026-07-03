@@ -12,9 +12,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-const initScriptsBaseDir = "/tmp/nunet/init-scripts-"
+const (
+	initScriptsBaseDir = "/tmp/nunet/init-scripts-"
+	provisionMountPath = "/run/nunet/provision"
+)
 
 func prepInitScripts(scripts map[string][]byte, id string) (string, error) {
 	if len(scripts) == 0 {
@@ -32,13 +37,13 @@ func prepInitScripts(scripts map[string][]byte, id string) (string, error) {
 		if err := os.WriteFile(filename, content, 0o700); err != nil {
 			return "", fmt.Errorf("failed to write init script %s: %w", name, err)
 		}
-		scriptNames = append(scriptNames, filename)
+		scriptNames = append(scriptNames, name)
 	}
 
 	wrapperContent := "#!/bin/sh\n\n"
 	for _, script := range scriptNames {
-		wrapperContent += fmt.Sprintf("echo 'Executing %s'\n", filepath.Base(script))
-		wrapperContent += fmt.Sprintf("%s\n", script)
+		wrapperContent += fmt.Sprintf("echo 'Executing %s'\n", script)
+		wrapperContent += fmt.Sprintf("%s/%s\n", provisionMountPath, script)
 	}
 
 	wrapperPath := filepath.Join(tempDir, "run_provision_scripts.sh")
@@ -47,6 +52,15 @@ func prepInitScripts(scripts map[string][]byte, id string) (string, error) {
 	}
 
 	return tempDir, nil
+}
+
+func provisionBindMount(hostDir string) specs.Mount {
+	return specs.Mount{
+		Type:        "bind",
+		Source:      hostDir,
+		Destination: provisionMountPath,
+		Options:     []string{"bind", "ro", "nosuid", "nodev"},
+	}
 }
 
 func removeInitScriptsDir(id string) error {
