@@ -23,6 +23,7 @@ type SubnetRoutingTable interface {
 	GetByIP(addr string) (peer.ID, bool)
 	All() map[peer.ID][]string
 	Clear()
+	Equal(other SubnetRoutingTable) bool
 }
 
 type rtable struct {
@@ -36,6 +37,18 @@ func NewRoutingTable() SubnetRoutingTable {
 		idx:    make(map[peer.ID][]string),
 		revIdx: make(map[string]peer.ID),
 	}
+}
+
+func RoutingTableFromMap(m map[string]string) (SubnetRoutingTable, error) {
+	rt := NewRoutingTable()
+	for ip, peerID := range m {
+		peerIDObj, err := peer.Decode(peerID)
+		if err != nil {
+			return nil, err
+		}
+		rt.Add(peerIDObj, ip)
+	}
+	return rt, nil
 }
 
 func (rt *rtable) Add(peerID peer.ID, addr string) {
@@ -120,4 +133,20 @@ func (rt *rtable) Clear() {
 
 	rt.idx = make(map[peer.ID][]string)
 	rt.revIdx = make(map[string]peer.ID)
+}
+
+func (rt *rtable) Equal(other SubnetRoutingTable) bool {
+	if len(rt.idx) != len(other.All()) {
+		return false
+	}
+	for peerID, addrs := range rt.idx {
+		otherAddrs, ok := other.Get(peerID)
+		if !ok {
+			return false
+		}
+		if !slices.Equal(addrs, otherAddrs) {
+			return false
+		}
+	}
+	return true
 }

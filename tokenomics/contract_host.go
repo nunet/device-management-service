@@ -36,16 +36,6 @@ const (
 	contractPeriodicChecker   = 5 * time.Minute
 )
 
-// FixedRentalBillingCheckerInterval controls how often the contract actor checks
-// whether a Fixed Rental invoice should be generated.
-// In production this is set to 15 minutes to balance timeliness and load.
-var FixedRentalBillingCheckerInterval = 15 * time.Minute
-
-// PeriodicBillingCheckerInterval controls how often the contract actor checks
-// whether a Periodic invoice should be generated.
-// Set to 1 minute for testing, will be changed to 15 minutes after E2E tests pass.
-var PeriodicBillingCheckerInterval = 15 * time.Minute
-
 // Sentinel errors for fixed rental and periodic invoice calculation
 var (
 	ErrFullPeriodElapsed = errors.New("full billing period has elapsed, use regular billing instead of pro-rated")

@@ -233,7 +233,7 @@ e2e:
 	fi
 	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
 	make setcap_e2e
-	go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=120m $(ARGS)
+	DMS_E2E_CACHE_KEYS=1 go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=120m $(ARGS)
 
 e2e-%:
 	@echo "Running e2e test: TestE2E/$*"
@@ -243,7 +243,7 @@ e2e-%:
 	fi
 	go build -o ./tests/e2e/dms -ldflags=$(LDFLAGS)
 	make setcap_e2e
-	go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=60m -run "TestE2E/$*" $(ARGS)
+	DMS_E2E_CACHE_KEYS=1 go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=60m -run "TestE2E/$*" $(ARGS)
 
 nix-e2e:
 	@echo "Running e2e tests using nix flake build"
@@ -261,7 +261,7 @@ nix-e2e:
 		$(MAKE) build-nunet-glusterfs-client; \
 	fi; \
 	
-	CGO_LDFLAGS="-Wl,-z,lazy" go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=35m $(ARGS)
+	CGO_LDFLAGS="-Wl,-z,lazy" DMS_E2E_CACHE_KEYS=1 go test -failfast -v ./tests/e2e/... -tags=e2e -timeout=35m $(ARGS)
 
 nix-e2e-%:
 	@$(MAKE) nix-e2e ARGS='-run "TestE2E/$*"' E2E_TIMEOUT=15m
