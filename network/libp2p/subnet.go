@@ -125,7 +125,21 @@ func (l *Libp2p) CreateSubnet(subnetID string, cidr string, routingTable map[str
 	defer l.subnetsmx.Unlock()
 
 	if _, ok := l.subnets[subnetID]; ok {
-		return fmt.Errorf("subnet with ID %s already exists", subnetID)
+		// check if all params match
+		if l.subnets[subnetID].info.cidr.String() != cidr {
+			return fmt.Errorf("subnet with ID %s already exists with different CIDR", subnetID)
+		}
+		rt, err := RoutingTableFromMap(routingTable)
+		if err != nil {
+			return fmt.Errorf("failed to create routing table: %w", err)
+		}
+
+		if !l.subnets[subnetID].info.rtable.Equal(rt) {
+			return fmt.Errorf("subnet with ID %s already exists with different routing table", subnetID)
+		}
+
+		// if everything is a match, all good
+		return nil
 	}
 
 	s := newSubnet(l.ctx, l, l.NetIfaceFactory)

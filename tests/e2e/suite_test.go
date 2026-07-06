@@ -552,12 +552,12 @@ func (s *TestSuite) setupTestNetwork() {
 					},
 				}
 			}
-		case "deployment_with_contracts_collect_after_pay_tests":
+		case "deployment_with_contract_collect_after_pay_tests":
 			if nodeIndex == 3 {
 				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9425/"
 				cfg.PaymentProvider.Mode = true
 			}
-		case "deployment_with_contracts_enforced_providers_tests":
+		case "deployment_with_contract_enforced_providers_tests":
 			if nodeIndex == 1 || nodeIndex == 2 || nodeIndex == 3 {
 				cfg.Job.RequireContractsForDeployment = true
 			}
@@ -571,22 +571,9 @@ func (s *TestSuite) setupTestNetwork() {
 				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9428/"
 				cfg.PaymentProvider.Mode = true
 			}
-		case "deployment_with_contracts_usdt_price_conversion_tests":
-			// Configure CoinMarketCap sandbox API for all nodes
-			// This is set for all nodes in the test (similar to how PaymentProvider is configured)
-			cfg.CoinMarketCap.APIKey = "4851bf9c832340328bc48b10cab272f7"
-			cfg.CoinMarketCap.BaseURL = "https://pro-api.coinmarketcap.com/v2"
-			cfg.CoinMarketCap.EndpointPath = "/tools/price-conversion"
-			cfg.CoinMarketCap.CacheTTL = "1s" // Short TTL for testing
-
-			// Also configure PaymentProvider for payment validator (node 3)
-			if nodeIndex == 3 {
-				cfg.PaymentProvider.EthereumRPCURL = "http://localhost:9429/" // Use different port to avoid conflicts
-				cfg.PaymentProvider.Mode = true
-			}
 		case "deployment_with_contracts_usdt_quote_tests":
 			// Configure CoinMarketCap sandbox API for all nodes
-			cfg.CoinMarketCap.APIKey = "4851bf9c832340328bc48b10cab272f7"
+			cfg.CoinMarketCap.APIKey = os.Getenv("DMS_TEST_CMC_API_KEY")
 			cfg.CoinMarketCap.BaseURL = "https://pro-api.coinmarketcap.com/v2"
 			cfg.CoinMarketCap.EndpointPath = "/tools/price-conversion"
 			cfg.CoinMarketCap.CacheTTL = "1s" // Short TTL for testing
@@ -735,7 +722,6 @@ func (s *TestSuite) setupTestNetwork() {
 
 	s.T().Logf("connecting nodes")
 	// connect all the nodes in the network
-	time.Sleep(5 * time.Second)
 	for i, node := range s.nodes {
 		for j := i + 1; j < len(s.nodes); j++ {
 			s.T().Logf("connecting node %d to node %d", i, j)

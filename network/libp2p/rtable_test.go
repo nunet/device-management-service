@@ -14,11 +14,13 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
 	testIP1       = "192.168.1.1"
 	testIP2       = "192.168.1.2"
+	testIP3       = "192.168.1.3"
 	testPrivateIP = "10.0.0.1"
 )
 
@@ -164,4 +166,84 @@ func TestRouteTable_Clear(t *testing.T) {
 
 	all := rt.All()
 	assert.Equal(t, 0, len(all))
+}
+
+func TestRoutingTableFromMap(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid map", func(t *testing.T) {
+		t.Parallel()
+
+		p1 := generatePeerID(t)
+
+		rt1, err := RoutingTableFromMap(map[string]string{testIP1: p1.String()})
+		require.NoError(t, err)
+		rt2 := NewRoutingTable()
+		rt2.Add(p1, testIP1)
+		assert.True(t, rt1.Equal(rt2))
+	})
+
+	t.Run("invalid map", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := RoutingTableFromMap(map[string]string{testIP1: "invalid"})
+		assert.Error(t, err)
+	})
+}
+
+func TestRouteTable_Equal(t *testing.T) {
+	t.Parallel()
+
+	t.Run("same table", func(t *testing.T) {
+		t.Parallel()
+
+		p1 := generatePeerID(t)
+
+		rt1, err := RoutingTableFromMap(map[string]string{testIP1: p1.String()})
+		require.NoError(t, err)
+		rt2, err := RoutingTableFromMap(map[string]string{testIP1: p1.String()})
+		require.NoError(t, err)
+
+		assert.True(t, rt1.Equal(rt2))
+	})
+
+	t.Run("different table", func(t *testing.T) {
+		t.Parallel()
+
+		rt1 := NewRoutingTable()
+		rt2 := NewRoutingTable()
+
+		rt1.Add(generatePeerID(t), testIP1)
+		rt2.Add(generatePeerID(t), testIP2)
+
+		assert.False(t, rt1.Equal(rt2))
+	})
+
+	t.Run("different number of peers", func(t *testing.T) {
+		t.Parallel()
+
+		rt1 := NewRoutingTable()
+		rt2 := NewRoutingTable()
+
+		p1 := generatePeerID(t)
+		rt1.Add(p1, testIP1)
+		rt1.Add(generatePeerID(t), testIP2)
+		rt2.Add(p1, testIP2)
+
+		assert.False(t, rt1.Equal(rt2))
+	})
+
+	t.Run("different addresses for same peer", func(t *testing.T) {
+		t.Parallel()
+
+		rt1 := NewRoutingTable()
+		rt2 := NewRoutingTable()
+
+		p1 := generatePeerID(t)
+		rt1.Add(p1, testIP1)
+		rt2.Add(p1, testIP2)
+		rt2.Add(p1, testIP2)
+		rt2.Add(p1, testIP3)
+		assert.False(t, rt1.Equal(rt2))
+	})
 }
