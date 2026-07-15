@@ -33,7 +33,7 @@ import (
 
 // Deployment behavior data source strategy:
 // - Store-based (primary source of truth): handleDeploymentList, handleDeploymentStatus, handleDeploymentManifest
-// - In-memory registry (requires active orchestrator): handleDeploymentLogs, handleDeploymentShutdown, handleDeploymentUpdate
+// - In-memory registry (requires active orchestrator): handleDeploymentLogs, handleDeploymentLogsAsync, handleDeploymentLogsAsyncStatus, handleDeploymentLogsAsyncStop, handleDeploymentShutdown, handleDeploymentUpdate
 // - Store + in-memory: handleNewDeployment (creates in memory, auto-saved to store via status watcher)
 
 // MinDeploymentTime minimum time for deployment
@@ -471,6 +471,173 @@ func (n *Node) handleDeploymentLogs(msg actor.Envelope) {
 
 	resp.LogsWrittenTo = allocDir
 	n.sendReply(msg, resp)
+}
+
+type DeploymentLogsAsyncRequest struct {
+	EnsembleID     string
+	AllocationName string
+	// Follow keeps fetching after catching up; polls at FollowInterval until stop or shutdown.
+	Follow bool
+	// FollowIntervalSeconds is optional; 0 uses the default (10s). Only used when Follow is true.
+	FollowIntervalSeconds int
+}
+
+type DeploymentLogsAsyncResponse struct {
+	LogsWrittenTo  string
+	Status         string
+	Follow         bool
+	FollowInterval string
+	Error          string
+}
+
+func (n *Node) handleDeploymentLogsAsync(msg actor.Envelope) {
+	defer msg.Discard()
+
+	orchestratorID := ""
+	handleErr := func(err error) {
+		log.Errorw("deployment_logs_async_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err,
+			"orchestratorID", orchestratorID,
+		)
+		n.sendReply(msg, DeploymentLogsAsyncResponse{Error: err.Error()})
+	}
+
+	var request DeploymentLogsAsyncRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(fmt.Errorf("error unmarshalling deployment logs async request: %w", err))
+		return
+	}
+
+	o, err := n.orchestratorRegistry.GetOrchestrator(request.EnsembleID)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get orchestrator: %w", err))
+		return
+	}
+	orchestratorID = o.ID()
+
+	opts := orchestrator.AllocationLogsFetchOpts{Follow: request.Follow}
+	if request.FollowIntervalSeconds > 0 {
+		opts.FollowInterval = time.Duration(request.FollowIntervalSeconds) * time.Second
+	}
+
+	job, err := o.StartFetchAllocationLogs(msg.From.DID.String(), request.AllocationName, opts)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to start allocation log fetch: %w", err))
+		return
+	}
+
+	n.sendReply(msg, DeploymentLogsAsyncResponse{
+		LogsWrittenTo:  job.LogsWrittenTo,
+		Status:         string(job.Status),
+		Follow:         job.Follow,
+		FollowInterval: job.FollowInterval.String(),
+	})
+}
+
+type DeploymentLogsAsyncStatusRequest struct {
+	EnsembleID     string
+	AllocationName string
+}
+
+type DeploymentLogsAsyncStatusResponse struct {
+	LogsWrittenTo  string
+	Status         string
+	BytesWritten   int64
+	Follow         bool
+	FollowInterval string
+	Error          string
+}
+
+func (n *Node) handleDeploymentLogsAsyncStatus(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorw("deployment_logs_async_status_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err,
+		)
+		n.sendReply(msg, DeploymentLogsAsyncStatusResponse{Error: err.Error()})
+	}
+
+	var request DeploymentLogsAsyncStatusRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(fmt.Errorf("error unmarshalling deployment logs async status request: %w", err))
+		return
+	}
+
+	o, err := n.orchestratorRegistry.GetOrchestrator(request.EnsembleID)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get orchestrator: %w", err))
+		return
+	}
+
+	job, ok := o.GetFetchAllocationLogsJob(msg.From.DID.String(), request.AllocationName)
+	if !ok {
+		handleErr(fmt.Errorf(
+			"no log fetch for allocation %s by requester %s",
+			request.AllocationName, msg.From.DID.String(),
+		))
+		return
+	}
+
+	n.sendReply(msg, DeploymentLogsAsyncStatusResponse{
+		LogsWrittenTo:  job.LogsWrittenTo,
+		Status:         string(job.Status),
+		BytesWritten:   job.BytesWritten,
+		Follow:         job.Follow,
+		FollowInterval: job.FollowInterval.String(),
+		Error:          job.Error,
+	})
+}
+
+type DeploymentLogsAsyncStopRequest struct {
+	EnsembleID     string
+	AllocationName string
+}
+
+type DeploymentLogsAsyncStopResponse struct {
+	LogsWrittenTo string
+	Status        string
+	BytesWritten  int64
+	Error         string
+}
+
+func (n *Node) handleDeploymentLogsAsyncStop(msg actor.Envelope) {
+	defer msg.Discard()
+
+	handleErr := func(err error) {
+		log.Errorw("deployment_logs_async_stop_error",
+			"labels", []string{string(observability.LabelDeployment)},
+			"error", err,
+		)
+		n.sendReply(msg, DeploymentLogsAsyncStopResponse{Error: err.Error()})
+	}
+
+	var request DeploymentLogsAsyncStopRequest
+	if err := json.Unmarshal(msg.Message, &request); err != nil {
+		handleErr(fmt.Errorf("error unmarshalling deployment logs async stop request: %w", err))
+		return
+	}
+
+	o, err := n.orchestratorRegistry.GetOrchestrator(request.EnsembleID)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to get orchestrator: %w", err))
+		return
+	}
+
+	job, err := o.StopFetchAllocationLogs(msg.From.DID.String(), request.AllocationName)
+	if err != nil {
+		handleErr(err)
+		return
+	}
+
+	n.sendReply(msg, DeploymentLogsAsyncStopResponse{
+		LogsWrittenTo: job.LogsWrittenTo,
+		Status:        string(job.Status),
+		BytesWritten:  job.BytesWritten,
+		Error:         job.Error,
+	})
 }
 
 type DeploymentStatusRequest struct {

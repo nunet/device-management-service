@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -466,7 +467,6 @@ func (n *Node) handleAllocationLogs(msg actor.Envelope) {
 		n.sendReply(msg, orchestrator.AllocationLogsResponse{Error: err.Error()})
 	}
 
-	var resp orchestrator.AllocationLogsResponse
 	ensembleID, err := ensembleIDFromBehavior(msg.Behavior)
 	if err != nil {
 		handleErr(fmt.Errorf("error getting ensemble ID from behavior %s: %s", msg.Behavior, err))
@@ -478,6 +478,72 @@ func (n *Node) handleAllocationLogs(msg actor.Envelope) {
 		handleErr(fmt.Errorf("allocation logs request: %w", types.ErrUnmarshal))
 		return
 	}
+
+	if req.MaxBytes > 0 {
+		n.handleAllocationLogsChunk(msg, ensembleID, req, handleErr)
+		return
+	}
+
+	n.handleAllocationLogsFull(msg, ensembleID, req, handleErr)
+}
+
+func (n *Node) handleAllocationLogsChunk(
+	msg actor.Envelope,
+	ensembleID string,
+	req orchestrator.AllocationLogsRequest,
+	handleErr func(error),
+) {
+	if req.Stream != behaviors.LogStreamStdout && req.Stream != behaviors.LogStreamStderr {
+		handleErr(fmt.Errorf("chunked logs request requires stream %q or %q", behaviors.LogStreamStdout, behaviors.LogStreamStderr))
+		return
+	}
+	if req.Offset < 0 || req.Ack < 0 {
+		handleErr(fmt.Errorf("invalid offset or ack"))
+		return
+	}
+	if req.Ack > req.Offset {
+		handleErr(fmt.Errorf("ack %d exceeds offset %d", req.Ack, req.Offset))
+		return
+	}
+
+	maxBytes := behaviors.CapChunkSize(req.MaxBytes, behaviors.DefaultLogChunkSize)
+
+	allocID := types.ConstructAllocationID(ensembleID, req.AllocName)
+	resultsDir := filepath.Join(n.dmsConfig.WorkDir, "jobs", allocID)
+
+	logFile := "stdout.log"
+	if req.Stream == behaviors.LogStreamStderr {
+		logFile = "stderr.log"
+	}
+
+	data, totalSize, nextOffset, eof, err := readLogChunk(n.fs, filepath.Join(resultsDir, logFile), req.Offset, maxBytes)
+	if err != nil {
+		handleErr(fmt.Errorf("failed to read log chunk: %w", err))
+		return
+	}
+
+	log.Infof("sending log chunk for allocation %s stream %s offset %d bytes %d eof %v",
+		allocID, req.Stream, req.Offset, len(data), eof)
+
+	n.sendReply(msg, orchestrator.AllocationLogsResponse{
+		Stream: req.Stream,
+		ChunkedTransferResponse: behaviors.ChunkedTransferResponse{
+			Offset:     req.Offset,
+			NextOffset: nextOffset,
+			TotalSize:  totalSize,
+			EOF:        eof,
+			Data:       data,
+		},
+	})
+}
+
+func (n *Node) handleAllocationLogsFull(
+	msg actor.Envelope,
+	ensembleID string,
+	req orchestrator.AllocationLogsRequest,
+	handleErr func(error),
+) {
+	var resp orchestrator.AllocationLogsResponse
 
 	allocID := types.ConstructAllocationID(ensembleID, req.AllocName)
 	resultsDir := filepath.Join(n.dmsConfig.WorkDir, "jobs", allocID)
@@ -515,6 +581,51 @@ func (n *Node) handleAllocationLogs(msg actor.Envelope) {
 	resp.Stdout = stdout
 	resp.Stderr = stderr
 	n.sendReply(msg, resp)
+}
+
+func readLogChunk(fs afero.Afero, path string, offset int64, maxBytes int) ([]byte, int64, int64, bool, error) {
+	info, err := fs.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, 0, offset, true, nil
+		}
+		return nil, 0, 0, false, err
+	}
+
+	totalSize := info.Size()
+	if offset > totalSize {
+		return nil, totalSize, 0, false, fmt.Errorf("offset %d beyond file size %d", offset, totalSize)
+	}
+	if offset == totalSize {
+		return nil, totalSize, totalSize, true, nil
+	}
+
+	f, err := fs.Open(path)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+	defer f.Close()
+
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return nil, 0, 0, false, err
+	}
+
+	toRead := int64(maxBytes)
+	if remaining := totalSize - offset; remaining < toRead {
+		toRead = remaining
+	}
+
+	buf := make([]byte, toRead)
+	n, err := f.Read(buf)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, 0, 0, false, err
+	}
+
+	data := buf[:n]
+	nextOffset := offset + int64(n)
+	eof := nextOffset >= totalSize
+
+	return data, totalSize, nextOffset, eof, nil
 }
 
 // AllocationsListResponse represents the response for the allocations list request

@@ -43,6 +43,9 @@ The following are the implemented behaviors and their associated capabilities:
 - DeploymentListBehavior: List all the deployments orchestrated by the node.
 /dms/node/deployment/logs
 - DeploymentLogsBehavior: Get the logs of a particular deployment.
+- DeploymentLogsAsyncBehavior: Start fetching deployment logs asynchronously to disk (one fetch per requester+allocation; optional --follow).
+- DeploymentLogsAsyncStatusBehavior: Poll status of that singleton async log fetch.
+- DeploymentLogsAsyncStopBehavior: Stop a running async (typically follow-mode) log fetch.
 /dms/node/deployment/status
 - DeploymentStatusBehavior: Get the status of a deployment.
 /dms/node/deployment/manifest

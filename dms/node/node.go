@@ -639,6 +639,15 @@ func (n *Node) getDMSBehaviors() map[string]struct {
 		behaviors.DeploymentLogsBehavior: {
 			fn: n.handleDeploymentLogs,
 		},
+		behaviors.DeploymentLogsAsyncBehavior: {
+			fn: n.handleDeploymentLogsAsync,
+		},
+		behaviors.DeploymentLogsAsyncStatusBehavior: {
+			fn: n.handleDeploymentLogsAsyncStatus,
+		},
+		behaviors.DeploymentLogsAsyncStopBehavior: {
+			fn: n.handleDeploymentLogsAsyncStop,
+		},
 		behaviors.DeploymentStatusBehavior: {
 			fn: n.handleDeploymentStatus,
 		},
