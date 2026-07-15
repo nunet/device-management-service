@@ -917,11 +917,47 @@ func TestOrchestratorGetAllocationLogs(t *testing.T) {
 		}()
 		defer msg.Discard()
 
-		reply, err := actor.ReplyTo(msg, AllocationLogsResponse{
-			Stdout: []byte("ok"),
-			Stderr: []byte{},
-			Error:  "",
-		})
+		var req AllocationLogsRequest
+		require.NoError(t, json.Unmarshal(msg.Message, &req))
+
+		var resp AllocationLogsResponse
+		if req.MaxBytes > 0 {
+			var payload []byte
+			switch req.Stream {
+			case behaviors.LogStreamStdout:
+				payload = []byte("ok")
+			case behaviors.LogStreamStderr:
+				payload = nil
+			default:
+				t.Fatalf("unexpected log stream: %s", req.Stream)
+			}
+
+			if req.Offset > int64(len(payload)) {
+				t.Fatalf("offset %d beyond payload size %d", req.Offset, len(payload))
+			}
+			chunk := payload[req.Offset:]
+			if len(chunk) > req.MaxBytes {
+				chunk = chunk[:req.MaxBytes]
+			}
+			nextOffset := req.Offset + int64(len(chunk))
+			resp = AllocationLogsResponse{
+				Stream: req.Stream,
+				ChunkedTransferResponse: behaviors.ChunkedTransferResponse{
+					Offset:     req.Offset,
+					NextOffset: nextOffset,
+					TotalSize:  int64(len(payload)),
+					EOF:        nextOffset >= int64(len(payload)),
+					Data:       chunk,
+				},
+			}
+		} else {
+			resp = AllocationLogsResponse{
+				Stdout: []byte("ok"),
+				Stderr: []byte{},
+			}
+		}
+
+		reply, err := actor.ReplyTo(msg, resp)
 		if err != nil {
 			t.Fatalf("creating reply: %s", err)
 		}

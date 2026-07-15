@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1147,5 +1148,76 @@ func TestHandleAllocationLogs(t *testing.T) {
 		assert.Empty(t, resp.Error)
 		assert.Equal(t, "test stdout log", string(resp.Stdout))
 		assert.Equal(t, "test stderr log", string(resp.Stderr))
+	})
+
+	t.Run("chunked transfer", func(t *testing.T) {
+		t.Parallel()
+
+		node, sActor, _ := newMockNodeWithSender(t, allocationLogsBehavior)
+
+		err := node.addEnsembleBehaviors(ensembleID)
+		assert.NoError(t, err)
+
+		allocName := "test-chunked-allocation"
+		allocID := types.ConstructAllocationID(ensembleID, allocName)
+		resultsDir := filepath.Join(node.dmsConfig.WorkDir, "jobs", allocID)
+		err = node.fs.MkdirAll(resultsDir, 0o755)
+		require.NoError(t, err)
+
+		stdoutPayload := strings.Repeat("a", 1200)
+		stderrPayload := strings.Repeat("b", 800)
+		err = afero.WriteFile(node.fs, filepath.Join(resultsDir, "stdout.log"), []byte(stdoutPayload), 0o644)
+		require.NoError(t, err)
+		err = afero.WriteFile(node.fs, filepath.Join(resultsDir, "stderr.log"), []byte(stderrPayload), 0o644)
+		require.NoError(t, err)
+
+		fetchStream := func(stream behaviors.LogStream) string {
+			t.Helper()
+			var result strings.Builder
+			offset := int64(0)
+			ack := int64(0)
+			for {
+				msg, err := actor.Message(
+					sActor.Handle(),
+					node.actor.Handle(),
+					allocationLogsBehavior,
+					orchestrator.AllocationLogsRequest{
+						AllocName: allocName,
+						Stream:    stream,
+						ChunkedTransferRequest: behaviors.ChunkedTransferRequest{
+							Ack:      ack,
+							Offset:   offset,
+							MaxBytes: 512,
+						},
+					},
+					actor.WithMessageExpiry(uint64(time.Now().Add(5*time.Second).UnixNano())),
+				)
+				require.NoError(t, err)
+
+				replyChan, err := sActor.Invoke(msg)
+				require.NoError(t, err)
+
+				reply := <-replyChan
+
+				var resp orchestrator.AllocationLogsResponse
+				err = json.Unmarshal(reply.Message, &resp)
+				reply.Discard()
+				require.NoError(t, err)
+				require.Empty(t, resp.Error)
+				require.Equal(t, stream, resp.Stream)
+				require.Equal(t, offset, resp.Offset)
+
+				result.Write(resp.Data)
+				ack = resp.NextOffset
+				offset = resp.NextOffset
+				if resp.EOF {
+					break
+				}
+			}
+			return result.String()
+		}
+
+		assert.Equal(t, stdoutPayload, fetchStream(behaviors.LogStreamStdout))
+		assert.Equal(t, stderrPayload, fetchStream(behaviors.LogStreamStderr))
 	})
 }

@@ -1309,6 +1309,95 @@ Examples:
   nunet actor cmd --context user /dms/node/deployment/logs --id <deployment_id> --allocation <allocation_name>`,
 	},
 
+	behaviors.DeploymentLogsAsyncBehavior: {
+		Action:  bInvoke,
+		Payload: func() any { return &node.DeploymentLogsAsyncRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentLogsAsyncRequest)
+			cmd.Flags().StringVarP(&p.EnsembleID, "id", "i", "", "ensemble ID (required)")
+			cmd.Flags().StringVarP(&p.AllocationName, "allocation", "a", "", "allocation name (required)")
+			cmd.Flags().BoolVar(&p.Follow, "follow", false, "keep fetching new log data after catching up")
+			cmd.Flags().IntVar(&p.FollowIntervalSeconds, "follow-interval", 0, "seconds between follow polls (default 10)")
+			_ = cmd.MarkFlagRequired("id")
+			_ = cmd.MarkFlagRequired("allocation")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*node.DeploymentLogsAsyncRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+			return dmsClient.DeploymentLogsAsync(ctx, *req, opts.MsgOpts...)
+		},
+		Short: "Start async deployment log fetch",
+		Long: `Invokes the /dms/node/deployment/logs/async behavior on an actor
+
+This behavior starts fetching deployment logs in the background. Log chunks are
+written to disk as they arrive. The response returns immediately with the output
+directory. One fetch runs per (requester, allocation) on the ensemble.
+
+With --follow, the fetch stays open and polls for new data (default every 10s)
+until /dms/node/deployment/logs/async/stop or deployment shutdown.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/logs/async --id <deployment_id> --allocation <allocation_name>
+  nunet actor cmd --context user /dms/node/deployment/logs/async --id <deployment_id> --allocation <allocation_name> --follow
+  nunet actor cmd --context user /dms/node/deployment/logs/async --id <deployment_id> --allocation <allocation_name> --follow --follow-interval 5`,
+	},
+
+	behaviors.DeploymentLogsAsyncStatusBehavior: {
+		Action:  bInvoke,
+		Payload: func() any { return &node.DeploymentLogsAsyncStatusRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentLogsAsyncStatusRequest)
+			cmd.Flags().StringVarP(&p.EnsembleID, "id", "i", "", "ensemble ID (required)")
+			cmd.Flags().StringVarP(&p.AllocationName, "allocation", "a", "", "allocation name (required)")
+			_ = cmd.MarkFlagRequired("id")
+			_ = cmd.MarkFlagRequired("allocation")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*node.DeploymentLogsAsyncStatusRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+			return dmsClient.DeploymentLogsAsyncStatus(ctx, *req, opts.MsgOpts...)
+		},
+		Short: "Get async deployment log fetch status",
+		Long: `Invokes the /dms/node/deployment/logs/async/status behavior on an actor
+
+Poll the status of the singleton background log fetch for this requester and
+allocation, started by /dms/node/deployment/logs/async.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/logs/async/status --id <deployment_id> --allocation <allocation_name>`,
+	},
+
+	behaviors.DeploymentLogsAsyncStopBehavior: {
+		Action:  bInvoke,
+		Payload: func() any { return &node.DeploymentLogsAsyncStopRequest{} },
+		SetFlags: func(cmd *cobra.Command, payload any) {
+			p := payload.(*node.DeploymentLogsAsyncStopRequest)
+			cmd.Flags().StringVarP(&p.EnsembleID, "id", "i", "", "ensemble ID (required)")
+			cmd.Flags().StringVarP(&p.AllocationName, "allocation", "a", "", "allocation name (required)")
+			_ = cmd.MarkFlagRequired("id")
+			_ = cmd.MarkFlagRequired("allocation")
+		},
+		RunFn: func(ctx context.Context, _ *cli.DmsCLI, dmsClient client.DmsClient, opts actorCmdOptions) (any, error) {
+			req, ok := opts.Payload.(*node.DeploymentLogsAsyncStopRequest)
+			if !ok {
+				return nil, fmt.Errorf("failed to decode payload")
+			}
+			return dmsClient.DeploymentLogsAsyncStop(ctx, *req, opts.MsgOpts...)
+		},
+		Short: "Stop async deployment log fetch",
+		Long: `Invokes the /dms/node/deployment/logs/async/stop behavior on an actor
+
+Stops a running async log fetch (especially useful with --follow). Also stops
+automatically when the deployment is shut down.
+
+Examples:
+  nunet actor cmd --context user /dms/node/deployment/logs/async/stop --id <deployment_id> --allocation <allocation_name>`,
+	},
+
 	// /dms/node/deployment/manifest
 	behaviors.DeploymentManifestBehavior: {
 		Action:  bInvoke,

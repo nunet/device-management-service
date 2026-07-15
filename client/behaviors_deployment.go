@@ -72,6 +72,57 @@ func (c *Client) DeploymentLogs(ctx context.Context, req node.DeploymentLogsRequ
 	return response, err
 }
 
+func (c *Client) DeploymentLogsAsync(ctx context.Context, req node.DeploymentLogsAsyncRequest, opts ...Option) (node.DeploymentLogsAsyncResponse, error) {
+	var response node.DeploymentLogsAsyncResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.DeploymentLogsAsyncBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.DeploymentLogsAsyncBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) DeploymentLogsAsyncStatus(ctx context.Context, req node.DeploymentLogsAsyncStatusRequest, opts ...Option) (node.DeploymentLogsAsyncStatusResponse, error) {
+	var response node.DeploymentLogsAsyncStatusResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.DeploymentLogsAsyncStatusBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.DeploymentLogsAsyncStatusBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
+func (c *Client) DeploymentLogsAsyncStop(ctx context.Context, req node.DeploymentLogsAsyncStopRequest, opts ...Option) (node.DeploymentLogsAsyncStopResponse, error) {
+	var response node.DeploymentLogsAsyncStopResponse
+
+	resp, err := c.InvokeBehavior(
+		ctx,
+		behaviors.DeploymentLogsAsyncStopBehavior,
+		req,
+		opts...,
+	)
+	if err != nil {
+		return response, fmt.Errorf("%s: %w", behaviors.DeploymentLogsAsyncStopBehavior, err)
+	}
+
+	err = c.unmarshalResponse(resp, &response)
+	return response, err
+}
+
 func (c *Client) DeploymentManifest(ctx context.Context, req node.DeploymentManifestRequest, opts ...Option) (node.DeploymentManifestResponse, error) {
 	var response node.DeploymentManifestResponse
 

@@ -173,6 +173,33 @@ func (m *MockOrchestrator) GetAllocationLogs(_ string) (AllocationLogsResponse, 
 	return AllocationLogsResponse{}, nil
 }
 
+func (m *MockOrchestrator) StartFetchAllocationLogs(requesterDID, allocName string, opts AllocationLogsFetchOpts) (AllocationLogsJob, error) {
+	return AllocationLogsJob{
+		RequesterDID:   requesterDID,
+		AllocName:      allocName,
+		LogsWrittenTo:  "/tmp/mock-logs",
+		Status:         AllocationLogsJobRunning,
+		Follow:         opts.Follow,
+		FollowInterval: opts.FollowInterval,
+	}, nil
+}
+
+func (m *MockOrchestrator) GetFetchAllocationLogsJob(requesterDID, allocName string) (AllocationLogsJob, bool) {
+	return AllocationLogsJob{
+		RequesterDID: requesterDID,
+		AllocName:    allocName,
+		Status:       AllocationLogsJobComplete,
+	}, true
+}
+
+func (m *MockOrchestrator) StopFetchAllocationLogs(requesterDID, allocName string) (AllocationLogsJob, error) {
+	return AllocationLogsJob{
+		RequesterDID: requesterDID,
+		AllocName:    allocName,
+		Status:       AllocationLogsJobStopped,
+	}, nil
+}
+
 func (m *MockOrchestrator) WriteAllocationLogs(_ string, _, _ []byte) (string, error) {
 	return "", nil
 }

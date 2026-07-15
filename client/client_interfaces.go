@@ -206,6 +206,12 @@ type ActorDeploymentBehaviorClient interface {
 
 	// DeploymentLogs retrieves the logs of a deployment
 	DeploymentLogs(ctx context.Context, req node.DeploymentLogsRequest, opts ...Option) (node.DeploymentLogsResponse, error)
+	// DeploymentLogsAsync starts an asynchronous log fetch that streams chunks to disk
+	DeploymentLogsAsync(ctx context.Context, req node.DeploymentLogsAsyncRequest, opts ...Option) (node.DeploymentLogsAsyncResponse, error)
+	// DeploymentLogsAsyncStatus returns the status of an asynchronous log fetch job
+	DeploymentLogsAsyncStatus(ctx context.Context, req node.DeploymentLogsAsyncStatusRequest, opts ...Option) (node.DeploymentLogsAsyncStatusResponse, error)
+	// DeploymentLogsAsyncStop stops a running (typically follow-mode) async log fetch
+	DeploymentLogsAsyncStop(ctx context.Context, req node.DeploymentLogsAsyncStopRequest, opts ...Option) (node.DeploymentLogsAsyncStopResponse, error)
 
 	// DeploymentManifest retrieves the manifest of a deployment
 	DeploymentManifest(ctx context.Context, req node.DeploymentManifestRequest, opts ...Option) (node.DeploymentManifestResponse, error)

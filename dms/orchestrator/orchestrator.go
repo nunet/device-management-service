@@ -31,7 +31,6 @@ import (
 	"gitlab.com/nunet/device-management-service/tokenomics/eventhandler"
 	"gitlab.com/nunet/device-management-service/tokenomics/events"
 	"gitlab.com/nunet/device-management-service/types"
-	"gitlab.com/nunet/device-management-service/utils"
 )
 
 // keep as var instead of consts so that we change the values in tests
@@ -72,6 +71,9 @@ type Orchestrator interface {
 	Shutdown() error
 	Stop()
 	GetAllocationLogs(allocationID string) (AllocationLogsResponse, error)
+	StartFetchAllocationLogs(requesterDID, allocationID string, opts AllocationLogsFetchOpts) (AllocationLogsJob, error)
+	GetFetchAllocationLogsJob(requesterDID, allocationID string) (AllocationLogsJob, bool)
+	StopFetchAllocationLogs(requesterDID, allocationID string) (AllocationLogsJob, error)
 	WriteAllocationLogs(allocationID string, stdout, stderr []byte) (string, error)
 	StatusChannel(ctx context.Context) <-chan jtypes.DeploymentStatus
 	Status() jtypes.DeploymentStatus
@@ -116,6 +118,9 @@ type BasicOrchestrator struct {
 
 	contractEventHandler *eventhandler.EventHandler
 	contracts            map[string]types.ContractConfig
+
+	logsJobs     map[string]*allocationLogsJobState
+	logsJobsLock sync.RWMutex
 }
 
 var _ Orchestrator = (*BasicOrchestrator)(nil)
@@ -675,68 +680,16 @@ func (o *BasicOrchestrator) Stop() {
 
 type AllocationLogsRequest struct {
 	AllocName string
+	behaviors.ChunkedTransferRequest
+	Stream behaviors.LogStream
 }
 
 type AllocationLogsResponse struct {
 	Stdout []byte
 	Stderr []byte
 	Error  string
-}
-
-func (o *BasicOrchestrator) GetAllocationLogs(name string) (AllocationLogsResponse, error) {
-	var allocNodeHandle actor.Handle
-	var logsResp AllocationLogsResponse
-	for _, n := range o.manifest.Nodes {
-		if ok := utils.SliceContains(n.Allocations, name); ok {
-			allocNodeHandle = n.Handle
-			break
-		}
-	}
-
-	if allocNodeHandle.Empty() {
-		return logsResp,
-			fmt.Errorf(
-				"node not found for allocation %s of ensemble %s",
-				name, o.id,
-			)
-	}
-
-	msg, err := actor.Message(
-		o.actor.Handle(),
-		allocNodeHandle,
-		fmt.Sprintf(behaviors.AllocationLogsBehavior.DynamicTemplate, o.manifest.ID),
-		AllocationLogsRequest{
-			AllocName: name,
-		},
-		actor.WithMessageExpiry(uint64(time.Now().Add(2*time.Minute).UnixNano())),
-	)
-	if err != nil {
-		return logsResp, fmt.Errorf("creating get logs message: %w", err)
-	}
-
-	replyCh, err := o.actor.Invoke(msg)
-	if err != nil {
-		return logsResp, fmt.Errorf("invoking get logs message: %w", err)
-	}
-
-	var reply actor.Envelope
-	select {
-	case reply = <-replyCh:
-	case <-time.After(2 * time.Minute):
-		return logsResp, fmt.Errorf("timeout getting logs for %s: %w", name, ErrDeploymentFailed)
-	}
-
-	defer reply.Discard()
-
-	if err := json.Unmarshal(reply.Message, &logsResp); err != nil {
-		return logsResp, fmt.Errorf("unmarshalling get logs response: %w", err)
-	}
-
-	if logsResp.Error != "" {
-		return logsResp, fmt.Errorf("replied with error getting logs for %s: %s", name, logsResp.Error)
-	}
-
-	return logsResp, nil
+	behaviors.ChunkedTransferResponse
+	Stream behaviors.LogStream
 }
 
 func (o *BasicOrchestrator) Status() jtypes.DeploymentStatus {
