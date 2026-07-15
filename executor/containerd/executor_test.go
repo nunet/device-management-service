@@ -260,8 +260,9 @@ func TestGetLogStreamAndList(t *testing.T) {
 	running.Store(true)
 
 	state := &executionState{
-		running: running,
-		doneCh:  make(chan struct{}),
+		executionID: "exec-logs",
+		running:     running,
+		doneCh:      make(chan struct{}),
 	}
 	_, _ = state.stdout.WriteString("hello ")
 	_, _ = state.stderr.WriteString("world")
@@ -273,7 +274,7 @@ func TestGetLogStreamAndList(t *testing.T) {
 
 	content, err := io.ReadAll(stream)
 	require.NoError(t, err)
-	require.Equal(t, "hello world", string(content))
+	require.Equal(t, "hello \nworld", string(content))
 
 	items := e.List()
 	require.Len(t, items, 1)

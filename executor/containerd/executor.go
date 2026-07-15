@@ -130,6 +130,11 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		return fmt.Errorf("execution ID cannot be empty")
 	}
 
+	log.Infow("starting containerd execution",
+		"executionID", request.ExecutionID,
+		"resultsDir", request.ResultsDir,
+	)
+
 	if st, found := e.executions.Get(request.ExecutionID); found {
 		if st.running.Load() {
 			return fmt.Errorf("execution is already started")
@@ -149,6 +154,10 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 		if !errdefs.IsNotFound(err) {
 			return fmt.Errorf("failed to get image %q: %w", spec.Image, err)
 		}
+		log.Infow("pulling containerd image",
+			"executionID", request.ExecutionID,
+			"image", spec.Image,
+		)
 		image, err = e.containerdClient.Pull(nsCtx, spec.Image, client.WithPullUnpack)
 		if err != nil {
 			return fmt.Errorf("failed to pull image %q: %w", spec.Image, err)
@@ -160,10 +169,18 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 
 	var netSetup *networkSetup
 	if e.networkMgr != nil {
+		log.Debugw("setting up CNI network",
+			"executionID", request.ExecutionID,
+			"ports", len(request.PortsToBind),
+		)
 		netSetup, err = e.networkMgr.setup(nsCtx, containerID, request.PortsToBind)
 		if err != nil {
 			return fmt.Errorf("failed to setup CNI network for execution %q: %w", request.ExecutionID, err)
 		}
+		log.Debugw("CNI network ready",
+			"executionID", request.ExecutionID,
+			"ip", netSetup.netInfo.IPAddress,
+		)
 	} else if len(request.PortsToBind) > 0 {
 		return fmt.Errorf("unable to do port forwarding, networking requires CNI")
 	}
@@ -297,10 +314,19 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 			cleanup()
 			return fmt.Errorf("prepare execution log files: %w", err)
 		}
+	} else {
+		log.Debugw("execution logs will be kept in memory",
+			"executionID", request.ExecutionID,
+		)
 	}
 
 	stdoutW, stderrW := state.logWriters()
 
+	log.Debugw("creating containerd task",
+		"executionID", request.ExecutionID,
+		"image", spec.Image,
+		"runtime", spec.RuntimeName(),
+	)
 	task, err := container.NewTask(nsCtx, cio.NewCreator(cio.WithStreams(nil, stdoutW, stderrW)))
 	if err != nil {
 		cleanup()
@@ -324,6 +350,11 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 	state.running.Store(true)
 	e.executions.Put(request.ExecutionID, state)
 
+	log.Infow("containerd execution started",
+		"executionID", request.ExecutionID,
+		"image", spec.Image,
+	)
+
 	go func(executionID string, st *executionState) {
 		defer close(st.doneCh)
 
@@ -335,6 +366,22 @@ func (e *Executor) Start(ctx context.Context, request *types.ExecutionRequest) e
 			}
 			st.setResult(result)
 			st.scheduleLogDeletion(st.persistLogsDuration)
+
+			if result != nil && result.ErrorMsg != "" {
+				log.Warnw("containerd execution finished with error",
+					"executionID", executionID,
+					"exitCode", result.ExitCode,
+					"error", result.ErrorMsg,
+				)
+				return
+			}
+
+			log.Infow("containerd execution finished",
+				"executionID", executionID,
+				"exitCode", result.ExitCode,
+				"stdoutBytes", len(result.STDOUT),
+				"stderrBytes", len(result.STDERR),
+			)
 		}
 
 		status, ok := <-waitCh
@@ -422,6 +469,10 @@ func (e *Executor) Cancel(ctx context.Context, executionID string) error {
 		return nil
 	}
 
+	log.Infow("cancelling containerd execution",
+		"executionID", executionID,
+	)
+
 	if err := state.task.Kill(e.withNamespace(ctx), syscall.SIGTERM); err != nil {
 		if errdefs.IsNotFound(err) {
 			return nil
@@ -445,9 +496,16 @@ func (e *Executor) Remove(executionID string, timeout time.Duration) error {
 		defer cancel()
 	}
 
+	log.Infow("removing containerd execution",
+		"executionID", executionID,
+		"running", state.running.Load(),
+	)
+
 	if state.running.Load() {
 		_ = state.task.Kill(ctx, syscall.SIGKILL)
 	}
+
+	state.closeLogFiles()
 
 	if _, err := state.task.Delete(ctx, client.WithProcessKill); err != nil && !errdefs.IsNotFound(err) {
 		return fmt.Errorf("failed to delete task for execution (%s): %w", executionID, err)
@@ -502,14 +560,28 @@ func (e *Executor) Cleanup(_ context.Context) error {
 	return fmt.Errorf("containerd cleanup failed: %s", sb.String())
 }
 
-func (e *Executor) GetLogStream(_ context.Context, request types.LogStreamRequest) (io.ReadCloser, error) {
+func (e *Executor) GetLogStream(ctx context.Context, request types.LogStreamRequest) (io.ReadCloser, error) {
 	state, found := e.executions.Get(request.ExecutionID)
 	if !found {
 		return nil, fmt.Errorf("execution (%s) not found", request.ExecutionID)
 	}
 
-	combined := state.combinedLogs()
-	return io.NopCloser(strings.NewReader(combined)), nil
+	log.Debugw("opening containerd log stream",
+		"executionID", request.ExecutionID,
+		"follow", request.Follow,
+		"tail", request.Tail,
+		"running", state.running.Load(),
+	)
+
+	reader := newLogStreamReader(ctx, state, request.Follow)
+	if request.Tail {
+		combined := state.combinedLogs()
+		if len(combined) > 0 {
+			reader.offset = len(combined)
+		}
+	}
+
+	return reader, nil
 }
 
 func (e *Executor) List() []types.ExecutionListItem {
