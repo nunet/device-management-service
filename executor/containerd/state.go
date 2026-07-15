@@ -10,6 +10,7 @@ package containerd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -33,8 +34,8 @@ type executionState struct {
 	persistLogsDuration time.Duration
 	stdoutFile          *os.File
 	stderrFile          *os.File
-	stdout              bytes.Buffer
-	stderr              bytes.Buffer
+	stdout              syncLogBuffer
+	stderr              syncLogBuffer
 
 	resultMu sync.RWMutex
 	result   *types.ExecutionResult
@@ -46,7 +47,34 @@ type executionState struct {
 const (
 	stdoutLogFile = "stdout.log"
 	stderrLogFile = "stderr.log"
+
+	logStreamPollInterval = 100 * time.Millisecond
 )
+
+// syncLogBuffer is a mutex-protected buffer used for concurrent container log writes and log stream reads
+type syncLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncLogBuffer) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncLogBuffer) WriteString(s string) (int, error) {
+	return b.Write([]byte(s))
+}
+
+func (b *syncLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
 
 func (s *executionState) setResult(result *types.ExecutionResult) {
 	s.resultMu.Lock()
@@ -88,6 +116,7 @@ func (s *executionState) openLogFiles(resultsDir string) error {
 
 	s.resultsDir = resultsDir
 	log.Debugw("execution log files opened",
+		"executionID", s.executionID,
 		"stdout", filepath.Join(resultsDir, stdoutLogFile),
 		"stderr", filepath.Join(resultsDir, stderrLogFile),
 	)
@@ -96,12 +125,12 @@ func (s *executionState) openLogFiles(resultsDir string) error {
 
 func (s *executionState) logWriters() (stdout, stderr io.Writer) {
 	if s.stdoutFile != nil {
-		stdout = s.stdoutFile
+		stdout = io.MultiWriter(s.stdoutFile, &s.stdout)
 	} else {
 		stdout = &s.stdout
 	}
 	if s.stderrFile != nil {
-		stderr = s.stderrFile
+		stderr = io.MultiWriter(s.stderrFile, &s.stderr)
 	} else {
 		stderr = &s.stderr
 	}
@@ -111,33 +140,47 @@ func (s *executionState) logWriters() (stdout, stderr io.Writer) {
 func (s *executionState) closeLogFiles() {
 	if s.stdoutFile != nil {
 		if err := s.stdoutFile.Close(); err != nil {
-			log.Warnw("failed to close stdout log file", "error", err)
+			log.Warnw("failed to close stdout log file",
+				"executionID", s.executionID,
+				"error", err,
+			)
 		}
 		s.stdoutFile = nil
 	}
 	if s.stderrFile != nil {
 		if err := s.stderrFile.Close(); err != nil {
-			log.Warnw("failed to close stderr log file", "error", err)
+			log.Warnw("failed to close stderr log file",
+				"executionID", s.executionID,
+				"error", err,
+			)
 		}
 		s.stderrFile = nil
 	}
 }
 
 func (s *executionState) readLogs() (string, string) {
-	if s.resultsDir == "" {
-		return s.stdout.String(), s.stderr.String()
+	stdout := s.stdout.String()
+	stderr := s.stderr.String()
+	if stdout != "" || stderr != "" || s.resultsDir == "" {
+		return stdout, stderr
 	}
 
-	var stdout, stderr string
+	// Fall back to on-disk logs when in-memory buffers are empty
 	if b, err := os.ReadFile(filepath.Join(s.resultsDir, stdoutLogFile)); err == nil {
 		stdout = string(b)
 	} else {
-		log.Warnw("failed to read stdout log file", "error", err)
+		log.Warnw("failed to read stdout log file",
+			"executionID", s.executionID,
+			"error", err,
+		)
 	}
 	if b, err := os.ReadFile(filepath.Join(s.resultsDir, stderrLogFile)); err == nil {
 		stderr = string(b)
 	} else {
-		log.Warnw("failed to read stderr log file", "error", err)
+		log.Warnw("failed to read stderr log file",
+			"executionID", s.executionID,
+			"error", err,
+		)
 	}
 	return stdout, stderr
 }
@@ -145,7 +188,14 @@ func (s *executionState) readLogs() (string, string) {
 func (s *executionState) combinedLogs() string {
 	stdout, stderr := s.readLogs()
 	// TODO weak combination
-	return stdout + stderr
+	switch {
+	case stdout == "":
+		return stderr
+	case stderr == "":
+		return stdout
+	default:
+		return stdout + "\n" + stderr
+	}
 }
 
 func (s *executionState) scheduleLogDeletion(after time.Duration) {
@@ -154,10 +204,76 @@ func (s *executionState) scheduleLogDeletion(after time.Duration) {
 	}
 
 	resultsDir := s.resultsDir
+	executionID := s.executionID
 	go func() {
+		log.Debugw("scheduling execution log deletion",
+			"executionID", executionID,
+			"resultsDir", resultsDir,
+			"after", after,
+		)
 		time.Sleep(after)
 		if err := os.RemoveAll(resultsDir); err != nil {
-			log.Errorw("failed to remove execution log files", "resultsDir", resultsDir, "error", err)
+			log.Errorw("failed to remove execution log files",
+				"executionID", executionID,
+				"resultsDir", resultsDir,
+				"error", err,
+			)
+			return
 		}
+		log.Debugw("execution log files removed",
+			"executionID", executionID,
+			"resultsDir", resultsDir,
+		)
 	}()
+}
+
+type logStreamReader struct {
+	ctx    context.Context
+	state  *executionState
+	follow bool
+	offset int
+}
+
+func newLogStreamReader(ctx context.Context, state *executionState, follow bool) *logStreamReader {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return &logStreamReader{
+		ctx:    ctx,
+		state:  state,
+		follow: follow,
+	}
+}
+
+func (r *logStreamReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+
+	for {
+		combined := r.state.combinedLogs()
+		if r.offset < len(combined) {
+			n := copy(p, combined[r.offset:])
+			r.offset += n
+			return n, nil
+		}
+
+		if !r.follow {
+			return 0, io.EOF
+		}
+
+		if !r.state.running.Load() {
+			return 0, io.EOF
+		}
+
+		select {
+		case <-r.ctx.Done():
+			return 0, r.ctx.Err()
+		case <-time.After(logStreamPollInterval):
+		}
+	}
+}
+
+func (r *logStreamReader) Close() error {
+	return nil
 }
